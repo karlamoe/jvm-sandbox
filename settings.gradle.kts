@@ -6,6 +6,8 @@ fun submodule(module: String) {
     project(":$module").projectDir = file("src/$module")
 }
 
+submodule("test-helper")
+
 submodule("jvm-sandbox-transformer")
 submodule("jvm-sandbox-runtime")
 submodule("jvm-sandbox-instructment")

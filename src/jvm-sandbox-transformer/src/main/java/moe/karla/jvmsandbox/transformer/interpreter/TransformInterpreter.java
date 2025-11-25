@@ -58,4 +58,15 @@ public class TransformInterpreter {
             FieldInsnNode node
     ) {
     }
+
+    public void interpretDynamicCall(
+            ClassNode klass,
+            MethodNode method,
+            TransformContext context,
+
+            ListIterator<AbstractInsnNode> iterator,
+            InvokeDynamicInsnNode node
+    ) {
+
+    }
 }

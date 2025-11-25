@@ -4,6 +4,7 @@ import moe.karla.jvmsandbox.transformer.TransformContext;
 import moe.karla.jvmsandbox.transformer.Transformer;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.InvokeDynamicInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 
 public class AllocPostProcessTransformer extends Transformer {
@@ -26,6 +27,8 @@ public class AllocPostProcessTransformer extends Transformer {
                     }
                 } else if (insn instanceof FieldInsnNode field) {
                     context.interpreter.interpretFieldCall(node, method, context, iterator, field);
+                }  else if(insn instanceof InvokeDynamicInsnNode dynamicInsnNode) {
+                    context.interpreter.interpretDynamicCall(node, method, context, iterator, dynamicInsnNode);
                 }
             }
         }

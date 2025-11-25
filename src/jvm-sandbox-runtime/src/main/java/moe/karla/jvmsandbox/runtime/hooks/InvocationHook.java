@@ -11,7 +11,7 @@ public class InvocationHook {
             String methodName,
             MethodType desc,
             int refType
-    ) {
+    ) throws Throwable {
         return null;
     }
 
@@ -23,7 +23,7 @@ public class InvocationHook {
             String factoryName,
             MethodType methodType,
             Object[] args
-    ) {
+    ) throws Throwable {
         return null;
     }
 }
