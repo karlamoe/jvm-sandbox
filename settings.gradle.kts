@@ -7,4 +7,6 @@ fun submodule(module: String) {
 }
 
 submodule("jvm-sandbox-transformer")
+submodule("jvm-sandbox-runtime")
+submodule("jvm-sandbox-instructment")
 

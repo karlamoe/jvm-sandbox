@@ -1,6 +1,7 @@
 allprojects {
     tasks.withType<Test> {
         useJUnitPlatform()
+        failOnNoDiscoveredTests = false
     }
 
     pluginManager.withPlugin("java") {
