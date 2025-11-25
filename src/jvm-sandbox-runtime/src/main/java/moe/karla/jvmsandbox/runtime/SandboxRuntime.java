@@ -1,12 +1,31 @@
 package moe.karla.jvmsandbox.runtime;
 
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
+import moe.karla.jvmsandbox.runtime.hooks.InvocationHookChain;
+import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
 
 import java.lang.invoke.*;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collection;
 
 public class SandboxRuntime extends InvocationHook {
+    private final Collection<InvocationHook> hooks;
+    private final InvocationHookChain chain;
+
+    public SandboxRuntime() {
+        this(new ArrayList<>());
+    }
+
+    public SandboxRuntime(Collection<InvocationHook> hooks) {
+        this.hooks = hooks;
+        this.chain = new InvocationHookChain(hooks);
+    }
+
+    public void addHook(InvocationHook hook) {
+        this.hooks.add(hook);
+    }
+
+
     @Override
     public CallSite interpretInvoke(
             MethodHandles.Lookup caller,
@@ -15,25 +34,29 @@ public class SandboxRuntime extends InvocationHook {
             MethodType desc,
             int refType
     ) throws Throwable {
-        return new ConstantCallSite((switch (refType) {
-            case MethodHandleInfo.REF_getField -> caller.findGetter(owner, methodName, desc.returnType());
-            case MethodHandleInfo.REF_putField -> caller.findSetter(owner, methodName, desc.parameterType(1));
-            case MethodHandleInfo.REF_getStatic -> caller.findStaticGetter(owner, methodName, desc.returnType());
-            case MethodHandleInfo.REF_putStatic -> caller.findStaticSetter(owner, methodName, desc.parameterType(0));
+        var result = chain.interpretInvoke(caller, owner, methodName, desc, refType);
+        if (result != null) return result;
 
-            case MethodHandleInfo.REF_invokeStatic -> caller.findStatic(owner, methodName, desc);
-            case MethodHandleInfo.REF_invokeSpecial ->
-                    caller.findSpecial(owner, methodName, desc.dropParameterTypes(0, 1), caller.lookupClass());
-            case MethodHandleInfo.REF_invokeInterface, MethodHandleInfo.REF_invokeVirtual ->
-                    caller.findVirtual(owner, methodName, desc.dropParameterTypes(0, 1));
+        return new ConstantCallSite(InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType).asType(desc));
+    }
 
-            case MethodHandleInfo.REF_newInvokeSpecial ->
-                    caller.findConstructor(owner, desc.changeReturnType(void.class));
+    @Override
+    public Object interpretValue(MethodHandles.Lookup caller, Object value) throws Throwable {
+        var result = chain.interpretValue(caller, value);
+        if (result != null) return result;
 
-            default -> throw new IllegalArgumentException(
-                    "Unknown refType: " + refType + ": " + owner + '.' + methodName + desc
-            );
-        }).asType(desc));
+        if (value instanceof MethodHandle argHandle) {
+            var handleInfo = caller.revealDirect(argHandle);
+            return interpretInvoke(
+                    caller,
+                    handleInfo.getDeclaringClass(),
+                    handleInfo.getName(),
+                    handleInfo.getMethodType(),
+                    handleInfo.getReferenceKind()
+            ).dynamicInvoker();
+        } else {
+            return value;
+        }
     }
 
     @Override
@@ -43,25 +66,20 @@ public class SandboxRuntime extends InvocationHook {
             MethodType factoryType,
             Object[] args
     ) throws Throwable {
+        var result = chain.interpretInvokeDynamic(caller, methodName, desc, metafactory, factoryName, factoryType, args);
+        if (result != null) return result;
+
         var handle = caller.findStatic(metafactory, factoryName, factoryType);
         var args0 = new ArrayList<>();
         args0.add(caller);
         args0.add(methodName);
         args0.add(desc);
         if (args != null) {
-            args0.addAll(Arrays.asList(args));
+            for (var arg : args) {
+                args0.add(interpretValue(caller, arg));
+            }
         }
 
-        if (!handle.isVarargsCollector()) {
-            while (handle.type().parameterCount() > 0) {
-                handle = handle.bindTo(args0.removeFirst());
-            }
-        } else {
-            while (handle.type().parameterCount() > 1) {
-                handle = handle.bindTo(args0.removeFirst());
-            }
-            handle = handle.asFixedArity().bindTo(args0.toArray());
-        }
-        return (CallSite) handle.invoke();
+        return (CallSite) handle.invokeWithArguments(args0);
     }
 }

@@ -26,4 +26,12 @@ public class InvocationHook {
     ) throws Throwable {
         return null;
     }
+
+
+    public Object interpretValue(
+            MethodHandles.Lookup caller,
+            Object value
+    ) throws Throwable {
+        return null;
+    }
 }
