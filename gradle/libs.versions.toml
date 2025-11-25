@@ -1,0 +1,10 @@
+[versions]
+asm = '9.9'
+
+[libraries]
+asm = { group = 'org.ow2.asm', version.ref = 'asm', name = 'asm' }
+asm-tree = { group = 'org.ow2.asm', version.ref = 'asm', name = 'asm-tree' }
+asm-commons = { group = 'org.ow2.asm', version.ref = 'asm', name = 'asm-commons' }
+asm-util = { group = 'org.ow2.asm', version.ref = 'asm', name = 'asm-util' }
+asm-analysis = { group = 'org.ow2.asm', version.ref = 'asm', name = 'asm-analysis' }
+
