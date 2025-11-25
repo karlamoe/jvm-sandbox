@@ -22,9 +22,9 @@ public class InvocationHookChain extends InvocationHook {
     }
 
     @Override
-    public CallSite interpretInvokeDynamic(MethodHandles.Lookup caller, String methodName, MethodType desc, Class<?> metafactory, String factoryName, MethodType methodType, Object[] args) throws Throwable {
+    public CallSite interpretInvokeDynamic(MethodHandles.Lookup caller, String methodName, MethodType desc, Class<?> metafactory, String factoryName, MethodType factoryType, Object[] args) throws Throwable {
         for (InvocationHook hook : hooks) {
-            var result = hook.interpretInvokeDynamic(caller, methodName, desc, metafactory, factoryName, methodType, args);
+            var result = hook.interpretInvokeDynamic(caller, methodName, desc, metafactory, factoryName, factoryType, args);
             if (result != null) return result;
         }
         return null;

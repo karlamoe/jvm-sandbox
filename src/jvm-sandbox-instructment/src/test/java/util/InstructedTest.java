@@ -30,6 +30,12 @@ public abstract class InstructedTest {
     protected ClassNode targetNode;
     protected Class<?> targetClass;
 
+    protected void setupTargetNode(ClassNode node) throws Throwable {
+        new ClassReader(getClass().getName() + "$TargetClass")
+                .accept(node, 0);
+
+    }
+
     @BeforeEach
     void beforeAll() throws Throwable {
         if (runtime != null) return;
@@ -45,8 +51,7 @@ public abstract class InstructedTest {
 
 
         var node = new ClassNode();
-        new ClassReader(getClass().getName() + "$TargetClass")
-                .accept(node, 0);
+        setupTargetNode(node);
 
         TransformContext context = new TransformContext();
         context.interpreter = new HookWrapperInterpreter(name);

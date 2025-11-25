@@ -69,4 +69,14 @@ public class TransformInterpreter {
     ) {
 
     }
+
+    public void interpretLdcInsn(
+            ClassNode klass,
+            MethodNode method,
+            TransformContext context,
+
+            ListIterator<AbstractInsnNode> iterator,
+            LdcInsnNode node
+    ) {
+    }
 }

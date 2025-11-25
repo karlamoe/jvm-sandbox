@@ -2,6 +2,8 @@ package moe.karla.jvmsandbox.instructment.generator;
 
 import moe.karla.jvmsandbox.transformer.TransformContext;
 import moe.karla.jvmsandbox.transformer.interpreter.TransformInterpreter;
+import moe.karla.jvmsandbox.transformer.util.ASMUtil;
+import org.objectweb.asm.ConstantDynamic;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -12,7 +14,6 @@ import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.ListIterator;
 
@@ -35,8 +36,19 @@ public class HookWrapperInterpreter extends TransformInterpreter {
             MethodType.class,                    // metafactory method desc
             Object[].class                       // metafactory method args
     ).toMethodDescriptorString();
+    public static final String DESC_HOOK_DYNAMIC_CONSTANT = MethodType.methodType(
+            Object.class,
+            MethodHandles.Lookup.class,  // caller
+            String.class,             // dynamic name
+            Class.class,                        // dynamic type
+            Class.class,                         // metafactory owner
+            String.class,                        // metafactory method name
+            MethodType.class,                    // metafactory method desc
+            Object[].class                       // metafactory method args
+    ).toMethodDescriptorString();
     public static final String NAME_HOOK_NORMAL = "hookNormal";
     public static final String NAME_HOOK_DYNAMIC = "hookDynamic";
+    public static final String NAME_HOOK_DYNAMIC_CONSTANT = "hookDynamicConstant";
 
     private final String targetClass;
 
@@ -122,24 +134,69 @@ public class HookWrapperInterpreter extends TransformInterpreter {
         );
     }
 
-    @Override
-    public void interpretDynamicCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, InvokeDynamicInsnNode node) {
+    protected List<Object> packBootstrapWithArguments(
+            ClassNode klass, MethodNode method, TransformContext context,
+            Handle bsm, Object[] bsmArgs
+    ) {
 
         List<Object> args = new ArrayList<>();
-        args.add(Type.getObjectType(node.bsm.getOwner()));
-        args.add(node.bsm.getName());
-        args.add(Type.getMethodType(node.bsm.getDesc()));
-        if (node.bsmArgs != null) {
-            args.addAll(Arrays.asList(node.bsmArgs));
+        args.add(Type.getObjectType(bsm.getOwner()));
+        args.add(bsm.getName());
+        args.add(Type.getMethodType(bsm.getDesc()));
+        if (bsmArgs != null) {
+            for (var arg : bsmArgs) {
+                args.add(interpretLdcValue(klass, method, context, arg));
+            }
         }
 
+        return args;
+    }
+
+    @Override
+    public void interpretDynamicCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, InvokeDynamicInsnNode node) {
         insertHostInvokeDynamic(
                 klass, method, context, iterator,
                 node.name,
                 node.desc,
                 NAME_HOOK_DYNAMIC,
                 DESC_HOOK_DYNAMIC,
-                args.toArray()
+                packBootstrapWithArguments(
+                        klass, method, context,
+                        node.bsm, node.bsmArgs
+                ).toArray()
         );
+    }
+
+    @Override
+    public void interpretLdcInsn(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, LdcInsnNode node) {
+        node.cst = interpretLdcValue(klass, method, context, node.cst);
+    }
+
+    public Object interpretLdcValue(
+            ClassNode klass, MethodNode method, TransformContext context,
+            Object value
+    ) {
+        if (value instanceof ConstantDynamic dynamic) {
+            return new ConstantDynamic(
+                    dynamic.getName(),
+                    dynamic.getDescriptor(),
+                    new Handle(Opcodes.H_INVOKESTATIC, targetClass,
+                            NAME_HOOK_DYNAMIC_CONSTANT, DESC_HOOK_DYNAMIC_CONSTANT,
+                            false),
+                    packBootstrapWithArguments(
+                            klass, method, context,
+                            dynamic.getBootstrapMethod(),
+                            (Object[]) interpretLdcValue(
+                                    klass, method, context,
+                                    ASMUtil.getBSMArguments(dynamic)
+                            )
+                    ).toArray()
+            );
+        } else if (value instanceof Object[] array) {
+            for (var i = 0; i < array.length; i++) {
+                array[i] = interpretLdcValue(klass, method, context, array[i]);
+            }
+        }
+        return value;
     }
 }

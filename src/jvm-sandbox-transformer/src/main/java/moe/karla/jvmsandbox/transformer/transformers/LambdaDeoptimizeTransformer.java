@@ -24,10 +24,7 @@ public class LambdaDeoptimizeTransformer extends Transformer {
 
             public Object proc(Object cst) {
                 if (cst instanceof ConstantDynamic dynamic) {
-                    var newBsmArgs = new Object[dynamic.getBootstrapMethodArgumentCount()];
-                    for (int i = 0; i < dynamic.getBootstrapMethodArgumentCount(); i++) {
-                        newBsmArgs[i] = dynamic.getBootstrapMethodArgument(i);
-                    }
+                    var newBsmArgs = ASMUtil.getBSMArguments(dynamic);
                     proc(newBsmArgs);
                     return new ConstantDynamic(
                             dynamic.getName(),

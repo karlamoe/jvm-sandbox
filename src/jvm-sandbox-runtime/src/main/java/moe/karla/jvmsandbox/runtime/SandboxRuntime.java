@@ -3,10 +3,12 @@ package moe.karla.jvmsandbox.runtime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHookChain;
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.invoke.*;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Optional;
 
 public class SandboxRuntime extends InvocationHook {
     private final Collection<InvocationHook> hooks;
@@ -81,5 +83,30 @@ public class SandboxRuntime extends InvocationHook {
         }
 
         return (CallSite) handle.invokeWithArguments(args0);
+    }
+
+
+    @Override
+    public @Nullable Optional<?> interpretInvokeDynamicConstant(
+            MethodHandles.Lookup caller, String methodName, Class<?> resultType,
+            Class<?> metafactory, String factoryName, MethodType factoryType,
+            Object[] args
+    ) throws Throwable {
+        var result = chain.interpretInvokeDynamicConstant(caller, methodName, resultType, metafactory, factoryName, factoryType, args);
+        if (result != null) return result;
+
+
+        var handle = caller.findStatic(metafactory, factoryName, factoryType);
+        var args0 = new ArrayList<>();
+        args0.add(caller);
+        args0.add(methodName);
+        args0.add(resultType);
+        if (args != null) {
+            for (var arg : args) {
+                args0.add(interpretValue(caller, arg));
+            }
+        }
+
+        return Optional.ofNullable(handle.invokeWithArguments(args0));
     }
 }

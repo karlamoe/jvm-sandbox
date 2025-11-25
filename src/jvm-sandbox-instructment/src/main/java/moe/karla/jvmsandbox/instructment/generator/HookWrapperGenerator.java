@@ -3,12 +3,14 @@ package moe.karla.jvmsandbox.instructment.generator;
 import moe.karla.jvmsandbox.runtime.SandboxInitializationHolder;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.Optional;
 
 import static moe.karla.jvmsandbox.transformer.util.ASMUtil.generateConstructor;
 
@@ -110,6 +112,58 @@ public class HookWrapperGenerator {
                     ).toMethodDescriptorString(),
                     false
             );
+            mv.visitInsn(Opcodes.ARETURN);
+            mv.visitMaxs(8, 7);
+            mv.visitEnd();
+        }
+        {
+            var mv = visitor.visitMethod(
+                    Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_VARARGS,
+                    HookWrapperInterpreter.NAME_HOOK_DYNAMIC_CONSTANT,
+                    HookWrapperInterpreter.DESC_HOOK_DYNAMIC_CONSTANT,
+                    null, null
+            );
+
+            mv.visitFieldInsn(Opcodes.GETSTATIC, klassName, "runtime", TYPE_SANDBOX_RUNTIME.getDescriptor());
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitVarInsn(Opcodes.ALOAD, 1);
+            mv.visitVarInsn(Opcodes.ALOAD, 2);
+            mv.visitVarInsn(Opcodes.ALOAD, 3);
+            mv.visitVarInsn(Opcodes.ALOAD, 4);
+            mv.visitVarInsn(Opcodes.ALOAD, 5);
+            mv.visitVarInsn(Opcodes.ALOAD, 6);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    TYPE_SANDBOX_RUNTIME.getInternalName(),
+                    "interpretInvokeDynamicConstant",
+                    MethodType.methodType(
+                            Optional.class,
+                            MethodHandles.Lookup.class,
+                            String.class,
+                            Class.class,
+                            Class.class,
+                            String.class,
+                            MethodType.class,
+                            Object[].class
+                    ).toMethodDescriptorString(),
+                    false
+            );
+            mv.visitInsn(Opcodes.DUP);
+
+            var nullCase = new Label();
+            mv.visitJumpInsn(Opcodes.IFNULL, nullCase);
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/Optional", "orElse", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+
+            mv.visitInsn(Opcodes.ARETURN);
+
+
+            mv.visitLabel(nullCase);
+            mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[]{
+                    "java/util/Optional"
+            });
+            mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.ACONST_NULL);
             mv.visitInsn(Opcodes.ARETURN);
             mv.visitMaxs(8, 7);
             mv.visitEnd();
