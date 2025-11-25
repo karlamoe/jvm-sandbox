@@ -3,13 +3,14 @@ package moe.karla.jvmsandbox.instructment.generator;
 import moe.karla.jvmsandbox.runtime.SandboxInitializationHolder;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+
+import static moe.karla.jvmsandbox.transformer.util.ASMUtil.generateConstructor;
 
 public class HookWrapperGenerator {
     private static final Type TYPE_SANDBOX_RUNTIME = Type.getType(SandboxRuntime.class);
@@ -115,19 +116,5 @@ public class HookWrapperGenerator {
         }
 
         visitor.visitEnd();
-    }
-
-    public static void generateConstructor(ClassVisitor visitor, String superKlass) {
-        MethodVisitor methodVisitor = visitor.visitMethod(
-                Opcodes.ACC_PRIVATE,
-                "<init>", "()V",
-                null, null
-        );
-        methodVisitor.visitCode();
-        methodVisitor.visitVarInsn(Opcodes.ALOAD, 0);
-        methodVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, superKlass, "<init>", "()V", false);
-        methodVisitor.visitInsn(Opcodes.RETURN);
-        methodVisitor.visitMaxs(1, 1);
-        methodVisitor.visitEnd();
     }
 }
