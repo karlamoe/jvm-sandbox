@@ -4,10 +4,12 @@ import moe.karla.jvmsandbox.transformer.TransformContext;
 import moe.karla.jvmsandbox.transformer.Transformer;
 import org.objectweb.asm.tree.*;
 
+import java.util.ArrayList;
+
 public class AllocPostProcessTransformer extends Transformer {
     @Override
     public ClassNode transform(ClassNode node, TransformContext context) throws Throwable {
-        for (var method : node.methods) {
+        for (var method : new ArrayList<>(node.methods)) {
             if (method.instructions == null) continue;
 
             var iterator = method.instructions.iterator();

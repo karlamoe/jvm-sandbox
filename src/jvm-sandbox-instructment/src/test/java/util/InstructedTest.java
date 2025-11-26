@@ -68,7 +68,8 @@ public abstract class InstructedTest {
 //        targetNode.accept(new TraceClassVisitor(cw, new PrintWriter(System.out)));
         targetNode.accept(new TraceClassVisitor(cw, new PrintWriter(result)));
 
-        var resultsFile = Paths.get("build/transformed/unit").resolve(getClass().getName() + ".txt");
+        var resultsDir = Paths.get("build/transformed/unit");
+        var resultsFile = resultsDir.resolve(getClass().getName() + ".txt");
         Files.createDirectories(resultsFile.getParent());
         Files.writeString(resultsFile, result.toString());
 
@@ -79,6 +80,10 @@ public abstract class InstructedTest {
             Class.forName(klass.getName(), true, this);
 
             bytecode = cw.toByteArray();
+            Files.write(
+                    resultsDir.resolve(InstructedTest.this.getClass().getName() + ".class"),
+                    bytecode
+            );
             targetClass = defineClass(null, bytecode, 0, bytecode.length);
         }};
     }

@@ -3,10 +3,7 @@ package moe.karla.jvmsandbox.instructment.generator;
 import moe.karla.jvmsandbox.transformer.TransformContext;
 import moe.karla.jvmsandbox.transformer.interpreter.TransformInterpreter;
 import moe.karla.jvmsandbox.transformer.util.ASMUtil;
-import org.objectweb.asm.ConstantDynamic;
-import org.objectweb.asm.Handle;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
+import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
 import java.lang.invoke.CallSite;
@@ -16,6 +13,7 @@ import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class HookWrapperInterpreter extends TransformInterpreter {
     public static final String DESC_HOOK_NORMAL = MethodType.methodType(
@@ -51,9 +49,16 @@ public class HookWrapperInterpreter extends TransformInterpreter {
     public static final String NAME_HOOK_DYNAMIC_CONSTANT = "hookDynamicConstant";
 
     private final String targetClass;
+    private final boolean noInvokeDynamic;
+    private final AtomicLong sequence = new AtomicLong(System.currentTimeMillis() ^ System.nanoTime());
 
     public HookWrapperInterpreter(String targetClass) {
+        this(targetClass, false);
+    }
+
+    public HookWrapperInterpreter(String targetClass, boolean noInvokeDynamic) {
         this.targetClass = targetClass;
+        this.noInvokeDynamic = noInvokeDynamic;
     }
 
     private void insertHostInvokeDynamic(
@@ -63,6 +68,99 @@ public class HookWrapperInterpreter extends TransformInterpreter {
             String bootstrapName, String bootstrapDesc,
             Object... args
     ) {
+        if (noInvokeDynamic || (klass.version < Opcodes.V1_8)) {
+            var descMH = "Ljava/lang/invoke/MethodHandle;";
+
+            var wrapperMethodName = ("$$$invokedynamic$$$destructed$$$" + System.currentTimeMillis() + "$" + sequence.incrementAndGet()).replace('-', '_');
+            klass.visitField(Opcodes.ACC_STATIC | Opcodes.ACC_PRIVATE, wrapperMethodName, descMH, null, null);
+
+            var forwardedMethod = klass.visitMethod(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL | Opcodes.ACC_STATIC, wrapperMethodName, methodDesc, null, null);
+            iterator.set(new MethodInsnNode(Opcodes.INVOKESTATIC, klass.name, wrapperMethodName, methodDesc));
+
+            forwardedMethod.visitFieldInsn(Opcodes.GETSTATIC, klass.name, wrapperMethodName, descMH);
+            forwardedMethod.visitInsn(Opcodes.DUP);
+            var realInvoke = new Label();
+            forwardedMethod.visitJumpInsn(Opcodes.IFNONNULL, realInvoke);
+            forwardedMethod.visitInsn(Opcodes.POP);
+
+            // region invoke metafactory
+
+            ASMUtil.getLookup(forwardedMethod);
+            forwardedMethod.visitLdcInsn(Type.getObjectType(targetClass));
+            forwardedMethod.visitLdcInsn(bootstrapName);
+            ASMUtil.emitMethodType(forwardedMethod, klass.name, bootstrapDesc);
+            forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandles$Lookup", "findStatic", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;", false);
+
+
+            var argsLength = args == null ? 0 : args.length;
+            var argsCount = Type.getArgumentCount(bootstrapDesc);
+            var bootstrapDescType = Type.getMethodType(bootstrapDesc);
+            var bootstrapLastArg = bootstrapDescType.getArgumentTypes()[bootstrapDescType.getArgumentCount() - 1];
+
+
+            if (bootstrapLastArg.getSort() == Type.ARRAY) { // vararg
+                forwardedMethod.visitLdcInsn(Type.getType(Object[].class));
+                forwardedMethod.visitLdcInsn(argsLength + 3 - (argsCount - 1));
+
+                forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "asCollector", "(Ljava/lang/Class;I)Ljava/lang/invoke/MethodHandle;", false);
+            }
+            forwardedMethod.visitLdcInsn(Type.getType(Object[].class));
+            forwardedMethod.visitLdcInsn(argsLength + 3);
+            forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "asSpreader", "(Ljava/lang/Class;I)Ljava/lang/invoke/MethodHandle;", false);
+            forwardedMethod.visitLdcInsn(Type.getType(Object[].class));
+            forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "asVarargsCollector", "(Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;", false);
+
+
+            ArrayList<Type> descTypes = new ArrayList<>(List.of(
+                    Type.getType(Object.class),
+                    Type.getType(Object.class),
+                    Type.getType(Object.class)
+            ));
+            ASMUtil.getLookup(forwardedMethod);
+            forwardedMethod.visitLdcInsn(methodName);
+            ASMUtil.emitMethodType(forwardedMethod, klass.name, methodDesc);
+            if (args != null) {
+                for (var arg : args) {
+                    forwardedMethod.visitLdcInsn(arg);
+
+                    if (arg instanceof Long) {
+                        descTypes.add(Type.LONG_TYPE);
+                    } else if (arg instanceof Double) {
+                        descTypes.add(Type.DOUBLE_TYPE);
+                    } else if (arg instanceof Float) {
+                        descTypes.add(Type.FLOAT_TYPE);
+                    } else if (arg instanceof Number) {
+                        descTypes.add(Type.INT_TYPE);
+                    } else {
+                        descTypes.add(Type.getType(Object.class));
+                    }
+                }
+            }
+
+            forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "invoke", Type.getMethodDescriptor(
+                    Type.getType(Object.class),
+                    descTypes.toArray(new Type[0])
+            ), false);
+            forwardedMethod.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/invoke/CallSite");
+            forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/CallSite", "dynamicInvoker", "()Ljava/lang/invoke/MethodHandle;", false);
+
+            forwardedMethod.visitInsn(Opcodes.DUP);
+            forwardedMethod.visitFieldInsn(Opcodes.PUTSTATIC, klass.name, wrapperMethodName, descMH);
+
+            // endregion
+
+            forwardedMethod.visitLabel(realInvoke);
+            forwardedMethod.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[]{"java/lang/invoke/MethodHandle"});
+
+
+            var methodDescType = Type.getMethodType(methodDesc);
+            ASMUtil.pushLocalsToStack(forwardedMethod, 0, methodDescType.getArgumentTypes());
+            forwardedMethod.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "invoke", methodDesc, false);
+            ASMUtil.popStackReturn(forwardedMethod, methodDescType.getReturnType());
+
+            return;
+        }
+
         iterator.set(
                 new InvokeDynamicInsnNode(
                         methodName, methodDesc,
