@@ -2,6 +2,7 @@ package moe.karla.jvmsandbox.runtime.helper;
 
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
+import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 
 import java.lang.invoke.*;
 
@@ -39,36 +40,44 @@ public class ReflectionRedirectHook extends InvocationHook {
     }
 
     private static MethodHandle adapter$findConstructor(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, MethodType desc) throws Throwable {
-        return runtime.interpretInvoke(caller, target, "<init>", desc.changeReturnType(target), MethodHandleInfo.REF_newInvokeSpecial)
-                .dynamicInvoker();
+        return runtime.interpretInvoke(
+                caller, target, "<init>", desc.changeReturnType(target), MethodHandleInfo.REF_newInvokeSpecial,
+                new RuntimeResolvationInfo(desc, null, null)
+        ).dynamicInvoker();
     }
 
     private static MethodHandle adapter$findVirtual(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, String name, MethodType desc) throws Throwable {
-        return runtime.interpretInvoke(caller, target, name, desc.insertParameterTypes(0, target), MethodHandleInfo.REF_invokeVirtual)
-                .dynamicInvoker();
+        return runtime.interpretInvoke(
+                caller, target, name, desc.insertParameterTypes(0, target), MethodHandleInfo.REF_invokeVirtual,
+                new RuntimeResolvationInfo(desc, null, null)
+        ).dynamicInvoker();
     }
 
     private static MethodHandle adapter$findSpecial(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, String name, MethodType desc, Class<?> specialCaller) throws Throwable {
-        // TODO specialCaller
-
-        return runtime.interpretInvoke(caller, target, name, desc.insertParameterTypes(0, caller.lookupClass()), MethodHandleInfo.REF_invokeSpecial)
-                .dynamicInvoker();
+        return runtime.interpretInvoke(
+                caller, target, name, desc.insertParameterTypes(0, caller.lookupClass()), MethodHandleInfo.REF_invokeSpecial,
+                new RuntimeResolvationInfo(desc, null, specialCaller)
+        ).dynamicInvoker();
     }
 
     private static MethodHandle adapter$findGetterSetter(SandboxRuntime runtime, int refType, MethodHandles.Lookup caller, Class<?> target, String name, Class<?> type) throws Throwable {
         return switch (refType) {
             case MethodHandleInfo.REF_getField -> runtime.interpretInvoke(
-                    caller, target, name, MethodType.methodType(type, target), refType
+                    caller, target, name, MethodType.methodType(type, target), refType,
+                    new RuntimeResolvationInfo(type, null, null)
             ).dynamicInvoker();
             case MethodHandleInfo.REF_putField -> runtime.interpretInvoke(
-                    caller, target, name, MethodType.methodType(void.class, target, type), refType
+                    caller, target, name, MethodType.methodType(void.class, target, type), refType,
+                    new RuntimeResolvationInfo(type, null, null)
             ).dynamicInvoker();
 
             case MethodHandleInfo.REF_getStatic -> runtime.interpretInvoke(
-                    caller, target, name, MethodType.methodType(type), refType
+                    caller, target, name, MethodType.methodType(type), refType,
+                    new RuntimeResolvationInfo(type, null, null)
             ).dynamicInvoker();
             case MethodHandleInfo.REF_putStatic -> runtime.interpretInvoke(
-                    caller, target, name, MethodType.methodType(void.class, type), refType
+                    caller, target, name, MethodType.methodType(void.class, type), refType,
+                    new RuntimeResolvationInfo(type, null, null)
             ).dynamicInvoker();
 
             default -> throw new AssertionError();
@@ -79,7 +88,7 @@ public class ReflectionRedirectHook extends InvocationHook {
     public CallSite interpretInvoke(
             SandboxRuntime runtime, MethodHandles.Lookup caller,
             Class<?> owner, String methodName, MethodType desc,
-            int refType
+            int refType, RuntimeResolvationInfo callInfo
     ) throws Throwable {
         if (owner == MethodHandles.Lookup.class) {
             switch (methodName) {

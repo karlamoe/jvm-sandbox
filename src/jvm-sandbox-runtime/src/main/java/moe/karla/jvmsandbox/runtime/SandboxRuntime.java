@@ -3,6 +3,7 @@ package moe.karla.jvmsandbox.runtime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHookChain;
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
+import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.invoke.*;
@@ -27,18 +28,21 @@ public class SandboxRuntime {
         this.hooks.add(hook);
     }
 
+    public CallSite interpretInvoke(
+            MethodHandles.Lookup caller, Class<?> owner,
+            String methodName, MethodType desc, int refType
+    ) throws Throwable {
+          return interpretInvoke(caller, owner, methodName, desc, refType, null);
+    }
 
     public CallSite interpretInvoke(
-            MethodHandles.Lookup caller,
-            Class<?> owner,
-            String methodName,
-            MethodType desc,
-            int refType
+            MethodHandles.Lookup caller, Class<?> owner, String methodName,
+            MethodType desc, int refType, RuntimeResolvationInfo callInfo
     ) throws Throwable {
-        var result = chain.interpretInvoke(this, caller, owner, methodName, desc, refType);
+        var result = chain.interpretInvoke(this, caller, owner, methodName, desc, refType, callInfo);
         if (result != null) return result;
 
-        return new ConstantCallSite(InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType).asType(desc));
+        return new ConstantCallSite(InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo).asType(desc));
     }
 
     public Object interpretValue(MethodHandles.Lookup caller, Object value) throws Throwable {

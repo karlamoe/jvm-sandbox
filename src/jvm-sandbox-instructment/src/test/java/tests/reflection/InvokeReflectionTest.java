@@ -3,6 +3,7 @@ package tests.reflection;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.runtime.helper.ReflectionRedirectHook;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
+import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import util.InstructedTest;
@@ -30,7 +31,7 @@ public class InvokeReflectionTest extends InstructedTest {
         runtime.addHook(new ReflectionRedirectHook());
         runtime.addHook(new InvocationHook() {
             @Override
-            public CallSite interpretInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> owner, String methodName, MethodType desc, int refType) throws Throwable {
+            public CallSite interpretInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> owner, String methodName, MethodType desc, int refType, RuntimeResolvationInfo callInfo) throws Throwable {
                 if (owner == Thread.class && "dumpStack".equals(methodName)) {
                     // throw new IllegalAccessError();
                     triggeredDumpStackSearch = true;
