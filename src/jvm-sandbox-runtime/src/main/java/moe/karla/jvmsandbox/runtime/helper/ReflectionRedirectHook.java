@@ -24,6 +24,7 @@ public class ReflectionRedirectHook extends InvocationHook {
     private static final MethodHandle MH_adapter$findGetterSetter;
     private static final MethodHandle MH_adapter$methodInvoke;
     private static final MethodHandle MH_adapter$constructorInvoke;
+    private static final MethodHandle MH_adapter$classNewInstance;
     private static final MethodHandle MH_adapter$unreflect;
     private static final MethodHandle MH_adapter$Field$getOrSet;
     private static final MethodHandle MH_adapter$revealDirect;
@@ -50,6 +51,7 @@ public class ReflectionRedirectHook extends InvocationHook {
             MH_adapter$findGetterSetter = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findGetterSetter", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, int.class, MethodHandles.Lookup.class, Class.class, String.class, Class.class));
             MH_adapter$methodInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$methodInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class, Object.class, Object[].class));
             MH_adapter$constructorInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$constructorInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Constructor.class, Object[].class));
+            MH_adapter$classNewInstance = lookup.findStatic(ReflectionRedirectHook.class, "adapter$classNewInstance", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class));
             MH_adapter$unreflect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflect", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class));
             MH_adapter$Field$getOrSet = lookup.findStatic(ReflectionRedirectHook.class, "adapter$Field$getOrSet", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, boolean.class, Class.class, Field.class));
             MH_adapter$revealDirect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$revealDirect", MethodType.methodType(MethodHandleInfo.class, SandboxRuntime.class, MethodHandles.Lookup.class, MethodHandle.class));
@@ -230,6 +232,12 @@ public class ReflectionRedirectHook extends InvocationHook {
         return cachedHandle.invoke(args);
     }
 
+    private static Object adapter$classNewInstance(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> type) throws Throwable {
+        Objects.requireNonNull(type);
+
+        return adapter$unreflectConstructor(runtime, caller, type.getDeclaredConstructor()).invoke();
+    }
+
     private static MethodHandleInfo adapter$revealDirect(SandboxRuntime runtime, MethodHandles.Lookup caller, MethodHandle request) throws Throwable {
         MethodHandle faked;
         try {
@@ -350,7 +358,7 @@ public class ReflectionRedirectHook extends InvocationHook {
 
 
                 case "unreflect" -> {
-                    return new ConstantCallSite(MH_adapter$unreflect.bindTo(runtime).bindTo(caller));
+                    return new ConstantCallSite(MH_adapter$unreflect.bindTo(runtime));
                 }
                 case "unreflectSpecial" -> {
                 }
@@ -373,7 +381,7 @@ public class ReflectionRedirectHook extends InvocationHook {
                 case "invoke" -> {
                     // Method.(Object, Object[])
                     return new ConstantCallSite(
-                            MH_adapter$methodInvoke.bindTo(runtime).bindTo(caller)
+                            MethodHandles.insertArguments(MH_adapter$methodInvoke, 0, runtime, caller)
                     );
                 }
             }
@@ -383,13 +391,20 @@ public class ReflectionRedirectHook extends InvocationHook {
                 case "newInstance" -> {
                     // Constructor.(Object[])
                     return new ConstantCallSite(
-                            MH_adapter$constructorInvoke.bindTo(runtime).bindTo(caller)
+                            MethodHandles.insertArguments(MH_adapter$constructorInvoke, 0, runtime, caller)
                     );
                 }
             }
         }
-
-
+        if (owner == Class.class) {
+            switch (methodName) {
+                case "newInstance" -> {
+                    return new ConstantCallSite(
+                            MethodHandles.insertArguments(MH_adapter$classNewInstance, 0, runtime, caller)
+                    );
+                }
+            }
+        }
         if (owner == Field.class) {
             switch (methodName) {
                 case "get", "getBoolean", "getByte", "getChar", "getShort", "getInt", "getLong", "getFloat",

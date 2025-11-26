@@ -23,6 +23,7 @@ public class ConstructTest extends InstructedTest {
             super(new Object());
             Thread.dumpStack();
             Object.class.getConstructor().newInstance();
+            Object.class.newInstance();
             MethodHandles.lookup().findConstructor(Object.class, MethodType.methodType(void.class)).invoke();
         }
 
