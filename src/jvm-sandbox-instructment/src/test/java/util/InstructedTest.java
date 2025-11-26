@@ -20,6 +20,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -33,6 +34,10 @@ public abstract class InstructedTest {
     protected void setupTargetNode(ClassNode node) throws Throwable {
         new ClassReader(getClass().getName() + "$TargetClass")
                 .accept(node, 0);
+
+        node.innerClasses = new ArrayList<>();
+        node.nestHostClass = null;
+        node.nestMembers = new ArrayList<>();
 
     }
 

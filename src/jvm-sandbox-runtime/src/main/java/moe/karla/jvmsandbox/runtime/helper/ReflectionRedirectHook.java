@@ -3,8 +3,16 @@ package moe.karla.jvmsandbox.runtime.helper;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
 import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
+import org.jetbrains.annotations.NotNull;
 
 import java.lang.invoke.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
+import java.util.WeakHashMap;
 
 public class ReflectionRedirectHook extends InvocationHook {
     private static final MethodHandle MH_CallSite$dynamicInvoker;
@@ -14,6 +22,9 @@ public class ReflectionRedirectHook extends InvocationHook {
     private static final MethodHandle MH_adapter$findSpecial;
     private static final MethodHandle MH_adapter$findVirtual;
     private static final MethodHandle MH_adapter$findGetterSetter;
+    private static final MethodHandle MH_adapter$methodInvoke;
+    private static final MethodHandle MH_adapter$unreflect;
+    private static final MethodHandle MH_adapter$Field$getOrSet;
 
     static {
         var lookup = MethodHandles.lookup();
@@ -34,6 +45,9 @@ public class ReflectionRedirectHook extends InvocationHook {
             MH_adapter$findSpecial = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findSpecial", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, String.class, MethodType.class, Class.class));
             MH_adapter$findVirtual = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findVirtual", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, String.class, MethodType.class));
             MH_adapter$findGetterSetter = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findGetterSetter", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, int.class, MethodHandles.Lookup.class, Class.class, String.class, Class.class));
+            MH_adapter$methodInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$methodInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class, Object.class, Object[].class));
+            MH_adapter$unreflect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflect", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class));
+            MH_adapter$Field$getOrSet = lookup.findStatic(ReflectionRedirectHook.class, "adapter$Field$getOrSet", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, boolean.class, Class.class, Field.class));
         } catch (Throwable ex) {
             throw new ExceptionInInitializerError(ex);
         }
@@ -84,6 +98,136 @@ public class ReflectionRedirectHook extends InvocationHook {
         };
     }
 
+    private static MethodHandle adapter$unreflect(SandboxRuntime runtime, MethodHandles.Lookup caller, Method method) throws Throwable {
+        if (Modifier.isStatic(method.getModifiers())) {
+            return runtime.interpretInvoke(
+                    caller, method.getDeclaringClass(), method.getName(),
+                    MethodType.methodType(
+                            method.getReturnType(), method.getParameterTypes()
+                    ),
+                    MethodHandleInfo.REF_invokeStatic,
+                    new RuntimeResolvationInfo(
+                            MethodType.methodType(
+                                    method.getReturnType(), method.getParameterTypes()
+                            ), method, null
+                    )
+            ).dynamicInvoker();
+        } else {
+            return runtime.interpretInvoke(
+                    caller, method.getDeclaringClass(), method.getName(),
+                    MethodType.methodType(
+                            method.getReturnType(), method.getDeclaringClass(), method.getParameterTypes()
+                    ),
+                    MethodHandleInfo.REF_invokeVirtual,
+                    new RuntimeResolvationInfo(
+                            MethodType.methodType(
+                                    method.getReturnType(), method.getParameterTypes()
+                            ), method, null
+                    )
+            ).dynamicInvoker();
+        }
+    }
+
+    private static MethodHandle adapter$unreflectField(SandboxRuntime runtime, boolean getter, MethodHandles.Lookup caller, Field field) throws Throwable {
+        if (getter) {
+            if (Modifier.isStatic(field.getModifiers())) {
+                return runtime.interpretInvoke(
+                        caller, field.getDeclaringClass(), field.getName(),
+                        MethodType.methodType(field.getType()),
+                        MethodHandleInfo.REF_getStatic,
+                        new RuntimeResolvationInfo(field.getType(), field, null)
+                ).dynamicInvoker();
+            } else {
+                return runtime.interpretInvoke(
+                        caller, field.getDeclaringClass(), field.getName(),
+                        MethodType.methodType(field.getType(), field.getDeclaringClass()),
+                        MethodHandleInfo.REF_getField,
+                        new RuntimeResolvationInfo(field.getType(), field, null)
+                ).dynamicInvoker();
+            }
+        } else {
+            if (Modifier.isStatic(field.getModifiers())) {
+                return runtime.interpretInvoke(
+                        caller, field.getDeclaringClass(), field.getName(),
+                        MethodType.methodType(void.class, field.getType()),
+                        MethodHandleInfo.REF_putStatic,
+                        new RuntimeResolvationInfo(field.getType(), field, null)
+                ).dynamicInvoker();
+            } else {
+                return runtime.interpretInvoke(
+                        caller, field.getDeclaringClass(), field.getName(),
+                        MethodType.methodType(void.class, field.getDeclaringClass(), field.getType()),
+                        MethodHandleInfo.REF_putField,
+                        new RuntimeResolvationInfo(field.getType(), field, null)
+                ).dynamicInvoker();
+            }
+        }
+    }
+
+    private static Object adapter$methodInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Method method, Object thiz, Object[] args) throws Throwable {
+        Objects.requireNonNull(method);
+
+        var cachePool = MethodUnreflectCachePool.unreflectMethodCache.get(caller.lookupClass());
+        var cachedHandle = cachePool.get(method);
+        if (cachedHandle != null) {
+            return cachedHandle.invoke(thiz, args);
+        }
+
+        cachedHandle = adapter$unreflect(runtime, caller, method);
+        if (Modifier.isStatic(method.getModifiers())) {
+            cachedHandle = cachedHandle.asSpreader(Object[].class, method.getParameterTypes().length);
+            cachedHandle = MethodHandles.dropArguments(cachedHandle, 0, Object.class);
+        } else {
+            cachedHandle = cachedHandle.asSpreader(1, Object[].class, method.getParameterTypes().length);
+        }
+
+        Object result = cachedHandle.invoke(thiz, args);
+        cachePool.put(method, cachedHandle);
+        return result;
+    }
+
+
+    private static MethodHandle adapter$Field$getOrSet(SandboxRuntime runtime, MethodHandles.Lookup caller, boolean getter, Class<?> resultType, Field field) throws Throwable {
+        Objects.requireNonNull(field);
+
+        if (getter) {
+            // (Object): ?
+            var castType = MethodType.methodType(resultType, Object.class);
+
+            var cachePool = MethodUnreflectCachePool.unreflectFieldGetterCache.get(caller.lookupClass());
+            var cachedHandle = cachePool.get(field);
+            if (cachedHandle != null) {
+                return cachedHandle.asType(castType);
+            }
+
+            cachedHandle = adapter$unreflectField(runtime, true, caller, field);
+            if (Modifier.isStatic(field.getModifiers())) {
+                cachedHandle = MethodHandles.dropArguments(cachedHandle, 0, Object.class);
+            }
+
+            cachePool.put(field, cachedHandle);
+            return cachedHandle.asType(castType);
+        } else {
+            // (Object, ?)V
+            var castType = MethodType.methodType(void.class, Object.class, resultType);
+
+            var cachePool = MethodUnreflectCachePool.unreflectFieldSetterCache.get(caller.lookupClass());
+            var cachedHandle = cachePool.get(field);
+            if (cachedHandle != null) {
+                return cachedHandle.asType(castType);
+            }
+
+            cachedHandle = adapter$unreflectField(runtime, false, caller, field);
+            if (Modifier.isStatic(field.getModifiers())) {
+                cachedHandle = MethodHandles.dropArguments(cachedHandle, 0, Object.class);
+            }
+
+            cachePool.put(field, cachedHandle);
+            return cachedHandle.asType(castType);
+        }
+    }
+
+    @SuppressWarnings("SwitchStatementWithTooFewBranches")
     @Override
     public CallSite interpretInvoke(
             SandboxRuntime runtime, MethodHandles.Lookup caller,
@@ -139,6 +283,7 @@ public class ReflectionRedirectHook extends InvocationHook {
 
 
                 case "unreflect" -> {
+                    return new ConstantCallSite(MH_adapter$unreflect.bindTo(runtime).bindTo(caller));
                 }
                 case "unreflectSpecial" -> {
                 }
@@ -155,6 +300,83 @@ public class ReflectionRedirectHook extends InvocationHook {
                 }
             }
         }
+
+        if (owner == Method.class) {
+            switch (methodName) {
+                case "invoke" -> {
+                    // Method.(Object, Object[])
+                    return new ConstantCallSite(
+                            MH_adapter$methodInvoke.bindTo(runtime).bindTo(caller)
+                    );
+                }
+            }
+        }
+
+        if (owner == Field.class) {
+            switch (methodName) {
+                case "get", "getBoolean", "getByte", "getChar", "getShort", "getInt", "getLong", "getFloat",
+                     "getDouble" -> {
+
+                    // Field.(Object)
+                    var invoker = MethodHandles.invoker(MethodType.methodType(desc.returnType(), Object.class));
+                    var mapper = MethodHandles.insertArguments(
+                            MH_adapter$Field$getOrSet,
+                            0,
+                            runtime, caller, true, desc.returnType()
+                    );
+
+                    return new ConstantCallSite(
+                            MethodHandles.filterArguments(
+                                    invoker,
+                                    0,
+                                    mapper
+                            )
+                    );
+                }
+                case "set", "setBoolean", "setByte", "setChar", "setShort", "setInt", "setLong", "setFloat",
+                     "setDouble" -> {
+                    // Field.(Object, Value)
+
+                    var invoker = MethodHandles.invoker(MethodType.methodType(void.class, Object.class, desc.lastParameterType()));
+                    var mapper = MethodHandles.insertArguments(
+                            MH_adapter$Field$getOrSet,
+                            0,
+                            runtime, caller, false, desc.lastParameterType()
+                    );
+
+                    return new ConstantCallSite(
+                            MethodHandles.filterArguments(
+                                    invoker,
+                                    0,
+                                    mapper
+                            )
+                    );
+                }
+            }
+        }
+
         return null;
+    }
+
+
+    private static class MethodUnreflectCachePool {
+        private static final ClassValue<Map<Method, MethodHandle>> unreflectMethodCache = new ClassValue<>() {
+            @Override
+            protected Map<Method, MethodHandle> computeValue(@NotNull Class<?> type) {
+                return Collections.synchronizedMap(new WeakHashMap<>());
+            }
+        };
+        private static final ClassValue<Map<Field, MethodHandle>> unreflectFieldGetterCache = new ClassValue<>() {
+            @Override
+            protected Map<Field, MethodHandle> computeValue(@NotNull Class<?> type) {
+                return Collections.synchronizedMap(new WeakHashMap<>());
+            }
+        };
+        private static final ClassValue<Map<Field, MethodHandle>> unreflectFieldSetterCache = new ClassValue<>() {
+            @Override
+            protected Map<Field, MethodHandle> computeValue(@NotNull Class<?> type) {
+                return Collections.synchronizedMap(new WeakHashMap<>());
+            }
+        };
     }
 }
