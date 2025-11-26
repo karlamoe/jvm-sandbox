@@ -64,7 +64,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
         this.noInvokeDynamic = noInvokeDynamic;
     }
 
-    private void insertHostInvokeDynamic(
+    private void replaceAsTargetInvokeDynamic(
             ClassNode klass, MethodNode method, TransformContext context,
             ListIterator<AbstractInsnNode> iterator,
             String methodName, String methodDesc,
@@ -175,7 +175,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
 
     @Override
     public void interpretObjectNew(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
-        insertHostInvokeDynamic(
+        replaceAsTargetInvokeDynamic(
                 klass, method, context, iterator,
                 "_", node.desc, NAME_HOOK_NORMAL, DESC_HOOK_NORMAL,
                 Type.getObjectType(node.owner),
@@ -183,17 +183,30 @@ public class HookWrapperInterpreter extends TransformInterpreter {
         );
     }
 
+    protected boolean shouldSkipInterpretMethodCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
+        if ("java/lang/invoke/MethodHandle".equals(node.owner)) {
+            // meaningless
+            return node.name.equals("invoke") || node.name.equals("invokeExact");
+        }
+
+        return false;
+    }
+
     @Override
     public void interpretMethodCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
+        if (shouldSkipInterpretMethodCall(klass, method, context, iterator, node)) {
+            return;
+        }
+
         if (node.getOpcode() == Opcodes.INVOKESTATIC) {
-            insertHostInvokeDynamic(
+            replaceAsTargetInvokeDynamic(
                     klass, method, context, iterator,
                     node.name, node.desc, NAME_HOOK_NORMAL, DESC_HOOK_NORMAL,
                     Type.getObjectType(node.owner),
                     MethodHandleInfo.REF_invokeStatic
             );
         } else {
-            insertHostInvokeDynamic(
+            replaceAsTargetInvokeDynamic(
                     klass, method, context, iterator,
                     node.name,
                     "(L" + node.owner + ";" + node.desc.substring(1),
@@ -212,7 +225,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
 
     @Override
     public void interpretFieldCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, FieldInsnNode node) {
-        insertHostInvokeDynamic(
+        replaceAsTargetInvokeDynamic(
                 klass, method, context, iterator,
                 node.name,
                 switch (node.getOpcode()) {
@@ -267,7 +280,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
         iterator.add(new InsnNode(Opcodes.NOP));
         iterator.previous();
         iterator.next();
-        insertHostInvokeDynamic(
+        replaceAsTargetInvokeDynamic(
                 klass, method, context, iterator,
                 "_", node.desc, NAME_HOOK_NORMAL, DESC_HOOK_NORMAL,
                 Type.getObjectType(klass.superName),
@@ -305,7 +318,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
 
     @Override
     public void interpretDynamicCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, InvokeDynamicInsnNode node) {
-        insertHostInvokeDynamic(
+        replaceAsTargetInvokeDynamic(
                 klass, method, context, iterator,
                 node.name,
                 node.desc,
