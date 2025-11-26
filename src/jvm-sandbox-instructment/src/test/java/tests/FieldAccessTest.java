@@ -1,7 +1,6 @@
 package tests;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
 import util.InstructedTest;
 
 public class FieldAccessTest extends InstructedTest {
@@ -22,10 +21,5 @@ public class FieldAccessTest extends InstructedTest {
             Assertions.assertEquals(0, a);
             System.out.println("OK");
         }
-    }
-
-    @Test
-    void run() throws Throwable {
-        ((Runnable) targetClass.newInstance()).run();
     }
 }

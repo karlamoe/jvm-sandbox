@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Optional;
 
-public class SandboxRuntime extends InvocationHook {
+public class SandboxRuntime {
     private final Collection<InvocationHook> hooks;
     private final InvocationHookChain chain;
 
@@ -28,7 +28,6 @@ public class SandboxRuntime extends InvocationHook {
     }
 
 
-    @Override
     public CallSite interpretInvoke(
             MethodHandles.Lookup caller,
             Class<?> owner,
@@ -36,15 +35,14 @@ public class SandboxRuntime extends InvocationHook {
             MethodType desc,
             int refType
     ) throws Throwable {
-        var result = chain.interpretInvoke(caller, owner, methodName, desc, refType);
+        var result = chain.interpretInvoke(this, caller, owner, methodName, desc, refType);
         if (result != null) return result;
 
         return new ConstantCallSite(InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType).asType(desc));
     }
 
-    @Override
     public Object interpretValue(MethodHandles.Lookup caller, Object value) throws Throwable {
-        var result = chain.interpretValue(caller, value);
+        var result = chain.interpretValue(this, caller, value);
         if (result != null) return result;
 
         if (value instanceof MethodHandle argHandle) {
@@ -61,14 +59,13 @@ public class SandboxRuntime extends InvocationHook {
         }
     }
 
-    @Override
     public CallSite interpretInvokeDynamic(
             MethodHandles.Lookup caller, String methodName, MethodType desc,
             Class<?> metafactory, String factoryName,
             MethodType factoryType,
             Object[] args
     ) throws Throwable {
-        var result = chain.interpretInvokeDynamic(caller, methodName, desc, metafactory, factoryName, factoryType, args);
+        var result = chain.interpretInvokeDynamic(this, caller, methodName, desc, metafactory, factoryName, factoryType, args);
         if (result != null) return result;
 
         var handle = caller.findStatic(metafactory, factoryName, factoryType);
@@ -86,13 +83,13 @@ public class SandboxRuntime extends InvocationHook {
     }
 
 
-    @Override
+    @SuppressWarnings("OptionalAssignedToNull")
     public @Nullable Optional<?> interpretInvokeDynamicConstant(
             MethodHandles.Lookup caller, String methodName, Class<?> resultType,
             Class<?> metafactory, String factoryName, MethodType factoryType,
             Object[] args
     ) throws Throwable {
-        var result = chain.interpretInvokeDynamicConstant(caller, methodName, resultType, metafactory, factoryName, factoryType, args);
+        var result = chain.interpretInvokeDynamicConstant(this, caller, methodName, resultType, metafactory, factoryName, factoryType, args);
         if (result != null) return result;
 
 

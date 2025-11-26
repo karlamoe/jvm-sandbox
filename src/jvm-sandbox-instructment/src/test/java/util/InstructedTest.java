@@ -41,6 +41,7 @@ public abstract class InstructedTest {
         if (runtime != null) return;
 
         runtime = init();
+        setup(runtime);
 
         var name = (InstructedTest.class.getName() + "." + getClass().getName() + "$TargetClass")
                 .replace('.', '/');
@@ -91,8 +92,13 @@ public abstract class InstructedTest {
         return new SandboxRuntime();
     }
 
+    protected void setup(SandboxRuntime runtime) {
+    }
 
     @Test
-    void $$init() {
+    protected void $$execute() throws Throwable {
+        if (Runnable.class.isAssignableFrom(targetClass)) {
+            ((Runnable) targetClass.newInstance()).run();
+        }
     }
 }

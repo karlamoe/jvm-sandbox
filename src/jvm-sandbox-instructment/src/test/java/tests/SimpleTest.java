@@ -1,6 +1,5 @@
 package tests;
 
-import org.junit.jupiter.api.Test;
 import util.InstructedTest;
 
 public class SimpleTest extends InstructedTest {
@@ -10,10 +9,5 @@ public class SimpleTest extends InstructedTest {
             System.out.println("Hello World");
             Thread.dumpStack();
         }
-    }
-
-    @Test
-    void run() throws Throwable {
-        ((Runnable) targetClass.newInstance()).run();
     }
 }

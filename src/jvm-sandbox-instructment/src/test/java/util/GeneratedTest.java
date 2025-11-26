@@ -1,7 +1,6 @@
 package util;
 
 import moe.karla.jvmsandbox.transformer.util.ASMUtil;
-import org.junit.jupiter.api.Test;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
@@ -18,9 +17,4 @@ public abstract class GeneratedTest extends InstructedTest {
     }
 
     protected abstract void setup(ClassNode node, MethodVisitor mv);
-
-    @Test
-    void run() throws Throwable {
-        ((Runnable) targetClass.newInstance()).run();
-    }
 }
