@@ -5,6 +5,7 @@ import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.invoke.CallSite;
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.Optional;
@@ -39,6 +40,15 @@ public class InvocationHookChain extends InvocationHook {
     public Object interpretValue(SandboxRuntime runtime, MethodHandles.Lookup caller, Object value) throws Throwable {
         for (InvocationHook hook : hooks) {
             var result = hook.interpretValue(runtime, caller, value);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    @Override
+    public CallSite interpretBeforeObjectConstruct(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, MethodType methodType) throws Throwable {
+        for (InvocationHook hook : hooks) {
+            var result = hook.interpretBeforeObjectConstruct(runtime, caller, target, methodType);
             if (result != null) return result;
         }
         return null;

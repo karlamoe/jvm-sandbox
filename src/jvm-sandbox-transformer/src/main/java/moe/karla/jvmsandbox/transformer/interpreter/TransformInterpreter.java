@@ -15,7 +15,7 @@ public class TransformInterpreter {
 
             ListIterator<AbstractInsnNode> iterator,
             MethodInsnNode node
-    ) {
+    ) throws Throwable {
         iterator.add(new TypeInsnNode(
                 Opcodes.NEW,
                 node.owner
@@ -35,7 +35,7 @@ public class TransformInterpreter {
 
             ListIterator<AbstractInsnNode> iterator,
             MethodInsnNode node
-    ) {
+    ) throws Throwable {
         node.name = "<init>";
     }
 
@@ -46,7 +46,7 @@ public class TransformInterpreter {
 
             ListIterator<AbstractInsnNode> iterator,
             MethodInsnNode node
-    ) {
+    ) throws Throwable {
     }
 
     public void interpretFieldCall(
@@ -56,7 +56,7 @@ public class TransformInterpreter {
 
             ListIterator<AbstractInsnNode> iterator,
             FieldInsnNode node
-    ) {
+    ) throws Throwable {
     }
 
     public void interpretDynamicCall(
@@ -66,7 +66,7 @@ public class TransformInterpreter {
 
             ListIterator<AbstractInsnNode> iterator,
             InvokeDynamicInsnNode node
-    ) {
+    ) throws Throwable {
 
     }
 
@@ -77,6 +77,6 @@ public class TransformInterpreter {
 
             ListIterator<AbstractInsnNode> iterator,
             LdcInsnNode node
-    ) {
+    ) throws Throwable {
     }
 }

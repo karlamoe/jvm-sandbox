@@ -13,6 +13,7 @@ import static java.lang.invoke.MethodHandleInfo.*;
 public class InvokeHelper {
     private static final int prefix_EXREF = 0x1344 << 12;
 
+    public static final int EXREF_beforeConstructor = prefix_EXREF | 8;
     public static final int EXREF_varhandleField = prefix_EXREF | 10;
     public static final int EXREF_varhandleStatic = prefix_EXREF | 11;
 

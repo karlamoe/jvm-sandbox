@@ -32,7 +32,7 @@ public class SandboxRuntime {
             MethodHandles.Lookup caller, Class<?> owner,
             String methodName, MethodType desc, int refType
     ) throws Throwable {
-          return interpretInvoke(caller, owner, methodName, desc, refType, null);
+        return interpretInvoke(caller, owner, methodName, desc, refType, null);
     }
 
     public CallSite interpretInvoke(
@@ -42,7 +42,28 @@ public class SandboxRuntime {
         var result = chain.interpretInvoke(this, caller, owner, methodName, desc, refType, callInfo);
         if (result != null) return result;
 
-        return new ConstantCallSite(InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo).asType(desc));
+        if (refType == InvokeHelper.EXREF_beforeConstructor) {
+            result = chain.interpretBeforeObjectConstruct(this, caller, owner, desc);
+            if (result != null) return result;
+
+            return new ConstantCallSite(MethodHandles.dropReturn(MethodHandles.dropArguments(
+                    MethodHandles.constant(Object.class, null),
+                    0,
+                    desc.parameterList()
+            )));
+        }
+
+        var realHandle = InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo).asType(desc);
+        if (refType == MethodHandleInfo.REF_newInvokeSpecial) {
+            var guard = chain.interpretBeforeObjectConstruct(this, caller, owner, desc.changeReturnType(void.class));
+            if (guard != null) {
+                realHandle = MethodHandles.foldArguments(
+                        realHandle,
+                        MethodHandles.dropReturn(guard.dynamicInvoker())
+                );
+            }
+        }
+        return new ConstantCallSite(realHandle);
     }
 
     public Object interpretValue(MethodHandles.Lookup caller, Object value) throws Throwable {

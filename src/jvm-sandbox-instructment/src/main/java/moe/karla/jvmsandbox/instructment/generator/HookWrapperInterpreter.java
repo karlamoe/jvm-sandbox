@@ -1,10 +1,13 @@
 package moe.karla.jvmsandbox.instructment.generator;
 
+import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
 import moe.karla.jvmsandbox.transformer.TransformContext;
 import moe.karla.jvmsandbox.transformer.interpreter.TransformInterpreter;
 import moe.karla.jvmsandbox.transformer.util.ASMUtil;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.analysis.Analyzer;
+import org.objectweb.asm.tree.analysis.BasicInterpreter;
 
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandleInfo;
@@ -231,6 +234,56 @@ public class HookWrapperInterpreter extends TransformInterpreter {
                 }
         );
     }
+
+    @Override
+    public void interpretSuperConstructorCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) throws Throwable {
+        super.interpretSuperConstructorCall(klass, method, context, iterator, node);
+        iterator.previous();
+
+        var frames = new Analyzer<>(new BasicInterpreter()).analyze(klass.name, method);
+        var index = method.instructions.indexOf(node);
+        var frame = frames[index];
+
+        var localStart = 2;
+        for (var i = 0; i < frame.getLocals(); i++) {
+            localStart += frame.getLocal(i).getSize();
+        }
+
+        // step1: save stack to locals
+        for (int tmpStack = localStart, i = frame.getStackSize() - 1; i > 0; i--) {
+            var stack = frame.getStack(i);
+            iterator.add(new VarInsnNode(stack.getType().getOpcode(Opcodes.ISTORE), tmpStack));
+            tmpStack += stack.getType().getSize();
+        }
+
+        // step2: push locals to stack again
+        for (int tmpStack = localStart, i = 1; i < frame.getStackSize(); i++) {
+            var stack = frame.getStack(i);
+            iterator.add(new VarInsnNode(stack.getType().getOpcode(Opcodes.ILOAD), tmpStack));
+            tmpStack += stack.getType().getSize();
+        }
+
+        // step3: call before construct check
+        iterator.add(new InsnNode(Opcodes.NOP));
+        iterator.previous();
+        iterator.next();
+        insertHostInvokeDynamic(
+                klass, method, context, iterator,
+                "_", node.desc, NAME_HOOK_NORMAL, DESC_HOOK_NORMAL,
+                Type.getObjectType(klass.superName),
+                InvokeHelper.EXREF_beforeConstructor
+        );
+
+        // step4: recover stacks
+        for (int tmpStack = localStart, i = 1; i < frame.getStackSize(); i++) {
+            var stack = frame.getStack(i);
+            iterator.add(new VarInsnNode(stack.getType().getOpcode(Opcodes.ILOAD), tmpStack));
+            tmpStack += stack.getType().getSize();
+        }
+
+        iterator.next();
+    }
+
 
     protected List<Object> packBootstrapWithArguments(
             ClassNode klass, MethodNode method, TransformContext context,

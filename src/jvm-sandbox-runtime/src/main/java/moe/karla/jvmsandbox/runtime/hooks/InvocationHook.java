@@ -56,4 +56,11 @@ public class InvocationHook {
     ) throws Throwable {
         return null;
     }
+
+    public CallSite interpretBeforeObjectConstruct(
+            SandboxRuntime runtime, MethodHandles.Lookup caller,
+            Class<?> target, MethodType methodType
+    ) throws Throwable {
+        return null;
+    }
 }
