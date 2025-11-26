@@ -3,6 +3,7 @@ package moe.karla.jvmsandbox.runtime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHookChain;
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
+import moe.karla.jvmsandbox.runtime.util.ReflectionCache;
 import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,6 +15,8 @@ import java.util.Optional;
 public class SandboxRuntime {
     private final Collection<InvocationHook> hooks;
     private final InvocationHookChain chain;
+
+    public final ReflectionCache reflectionCache = new ReflectionCache();
 
     public SandboxRuntime() {
         this(new ArrayList<>());
@@ -54,16 +57,21 @@ public class SandboxRuntime {
         }
 
         var realHandle = InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo).asType(desc);
+        var resultHandle = realHandle;
         if (refType == MethodHandleInfo.REF_newInvokeSpecial) {
             var guard = chain.interpretBeforeObjectConstruct(this, caller, owner, desc.changeReturnType(void.class));
             if (guard != null) {
-                realHandle = MethodHandles.foldArguments(
+                resultHandle = MethodHandles.foldArguments(
                         realHandle,
                         MethodHandles.dropReturn(guard.dynamicInvoker())
                 );
+
+                if (callInfo != null) {
+                    reflectionCache.pushFakedSource(resultHandle, realHandle);
+                }
             }
         }
-        return new ConstantCallSite(realHandle);
+        return new ConstantCallSite(resultHandle);
     }
 
     public Object interpretValue(MethodHandles.Lookup caller, Object value) throws Throwable {

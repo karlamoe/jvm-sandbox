@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class InstructedTest {
@@ -109,6 +110,15 @@ public abstract class InstructedTest {
     protected void $$execute() throws Throwable {
         if (Runnable.class.isAssignableFrom(targetClass)) {
             ((Runnable) targetClass.newInstance()).run();
+        } else if (Callable.class.isAssignableFrom(targetClass)) {
+            ((Callable) targetClass.newInstance()).call();
+        } else {
+            try {
+                var met = targetClass.getDeclaredMethod("run");
+                met.setAccessible(true);
+                met.invoke(null);
+            } catch (NoSuchMethodException ignored) {
+            }
         }
     }
 }

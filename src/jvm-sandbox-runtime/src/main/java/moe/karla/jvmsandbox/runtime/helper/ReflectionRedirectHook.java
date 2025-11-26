@@ -2,13 +2,12 @@ package moe.karla.jvmsandbox.runtime.helper;
 
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
+import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
 import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.invoke.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -20,11 +19,14 @@ public class ReflectionRedirectHook extends InvocationHook {
     private static final MethodHandle MH_interpretInvoke$MethodHandle;
     private static final MethodHandle MH_adapter$findConstructor;
     private static final MethodHandle MH_adapter$findSpecial;
+    private static final MethodHandle MH_adapter$findStatic;
     private static final MethodHandle MH_adapter$findVirtual;
     private static final MethodHandle MH_adapter$findGetterSetter;
     private static final MethodHandle MH_adapter$methodInvoke;
+    private static final MethodHandle MH_adapter$constructorInvoke;
     private static final MethodHandle MH_adapter$unreflect;
     private static final MethodHandle MH_adapter$Field$getOrSet;
+    private static final MethodHandle MH_adapter$revealDirect;
 
     static {
         var lookup = MethodHandles.lookup();
@@ -43,11 +45,14 @@ public class ReflectionRedirectHook extends InvocationHook {
 
             MH_adapter$findConstructor = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findConstructor", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, MethodType.class));
             MH_adapter$findSpecial = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findSpecial", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, String.class, MethodType.class, Class.class));
+            MH_adapter$findStatic = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findStatic", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, String.class, MethodType.class));
             MH_adapter$findVirtual = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findVirtual", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, String.class, MethodType.class));
             MH_adapter$findGetterSetter = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findGetterSetter", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, int.class, MethodHandles.Lookup.class, Class.class, String.class, Class.class));
             MH_adapter$methodInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$methodInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class, Object.class, Object[].class));
+            MH_adapter$constructorInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$constructorInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Constructor.class, Object[].class));
             MH_adapter$unreflect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflect", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class));
             MH_adapter$Field$getOrSet = lookup.findStatic(ReflectionRedirectHook.class, "adapter$Field$getOrSet", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, boolean.class, Class.class, Field.class));
+            MH_adapter$revealDirect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$revealDirect", MethodType.methodType(MethodHandleInfo.class, SandboxRuntime.class, MethodHandles.Lookup.class, MethodHandle.class));
         } catch (Throwable ex) {
             throw new ExceptionInInitializerError(ex);
         }
@@ -63,6 +68,13 @@ public class ReflectionRedirectHook extends InvocationHook {
     private static MethodHandle adapter$findVirtual(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, String name, MethodType desc) throws Throwable {
         return runtime.interpretInvoke(
                 caller, target, name, desc.insertParameterTypes(0, target), MethodHandleInfo.REF_invokeVirtual,
+                new RuntimeResolvationInfo(desc, null, null)
+        ).dynamicInvoker();
+    }
+
+    private static MethodHandle adapter$findStatic(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, String name, MethodType desc) throws Throwable {
+        return runtime.interpretInvoke(
+                caller, target, name, desc, MethodHandleInfo.REF_invokeStatic,
                 new RuntimeResolvationInfo(desc, null, null)
         ).dynamicInvoker();
     }
@@ -128,6 +140,21 @@ public class ReflectionRedirectHook extends InvocationHook {
         }
     }
 
+    private static MethodHandle adapter$unreflectConstructor(SandboxRuntime runtime, MethodHandles.Lookup caller, Constructor<?> constructor) throws Throwable {
+        return runtime.interpretInvoke(
+                caller, constructor.getDeclaringClass(), "_",
+                MethodType.methodType(
+                        constructor.getDeclaringClass(), constructor.getParameterTypes()
+                ),
+                MethodHandleInfo.REF_newInvokeSpecial,
+                new RuntimeResolvationInfo(
+                        MethodType.methodType(
+                                void.class, constructor.getParameterTypes()
+                        ), constructor, null
+                )
+        ).dynamicInvoker();
+    }
+
     private static MethodHandle adapter$unreflectField(SandboxRuntime runtime, boolean getter, MethodHandles.Lookup caller, Field field) throws Throwable {
         if (getter) {
             if (Modifier.isStatic(field.getModifiers())) {
@@ -186,6 +213,34 @@ public class ReflectionRedirectHook extends InvocationHook {
         return result;
     }
 
+    private static Object adapter$constructorInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Constructor<?> constructor, Object[] args) throws Throwable {
+        Objects.requireNonNull(constructor);
+
+        var cachePool = MethodUnreflectCachePool.unreflectMethodCache.get(caller.lookupClass());
+        var cachedHandle = cachePool.get(constructor);
+        if (cachedHandle != null) {
+            return cachedHandle.invoke(args);
+        }
+
+        cachedHandle = adapter$unreflectConstructor(runtime, caller, constructor)
+                .asSpreader(Object[].class, constructor.getParameterTypes().length);
+
+        cachePool.put(constructor, cachedHandle);
+
+        return cachedHandle.invoke(args);
+    }
+
+    private static MethodHandleInfo adapter$revealDirect(SandboxRuntime runtime, MethodHandles.Lookup caller, MethodHandle request) throws Throwable {
+        MethodHandle faked;
+        try {
+            faked = runtime.reflectionCache.getFakedRealHandle(request);
+        } catch (Throwable e) {
+            throw new IllegalArgumentException(e);
+        }
+
+        return caller.revealDirect(faked);
+    }
+
 
     private static MethodHandle adapter$Field$getOrSet(SandboxRuntime runtime, MethodHandles.Lookup caller, boolean getter, Class<?> resultType, Field field) throws Throwable {
         Objects.requireNonNull(field);
@@ -227,9 +282,24 @@ public class ReflectionRedirectHook extends InvocationHook {
         }
     }
 
-    @SuppressWarnings("SwitchStatementWithTooFewBranches")
     @Override
     public CallSite interpretInvoke(
+            SandboxRuntime runtime, MethodHandles.Lookup caller,
+            Class<?> owner, String methodName, MethodType desc,
+            int refType, RuntimeResolvationInfo callInfo
+    ) throws Throwable {
+        var result = interpretInvoke0(runtime, caller, owner, methodName, desc, refType, callInfo);
+        if (result != null && callInfo != null) {
+            runtime.reflectionCache.pushFakedSource(result.getTarget(),
+                    InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo)
+            );
+        }
+
+        return result;
+    }
+
+    @SuppressWarnings("SwitchStatementWithTooFewBranches")
+    public CallSite interpretInvoke0(
             SandboxRuntime runtime, MethodHandles.Lookup caller,
             Class<?> owner, String methodName, MethodType desc,
             int refType, RuntimeResolvationInfo callInfo
@@ -240,10 +310,7 @@ public class ReflectionRedirectHook extends InvocationHook {
                 // invokes
                 case "findStatic" -> {
                     // Lookup.(Class<?>, String, MethodType)MethodHandle
-                    return new ConstantCallSite(
-                            MethodHandles.insertArguments(MH_interpretInvoke$MethodHandle, 5, MethodHandleInfo.REF_invokeStatic)
-                                    .bindTo(runtime)
-                    );
+                    return new ConstantCallSite(MH_adapter$findStatic.bindTo(runtime));
                 }
                 case "findVirtual" -> {
                     // Lookup.(Class<?>, String name, MethodType)MethodHandle
@@ -296,7 +363,7 @@ public class ReflectionRedirectHook extends InvocationHook {
                 case "unreflectVarHandle" -> {
                 }
                 case "revealDirect" -> {
-                    // TODO
+                    return new ConstantCallSite(MH_adapter$revealDirect.bindTo(runtime));
                 }
             }
         }
@@ -311,6 +378,17 @@ public class ReflectionRedirectHook extends InvocationHook {
                 }
             }
         }
+        if (owner == Constructor.class) {
+            switch (methodName) {
+                case "newInstance" -> {
+                    // Constructor.(Object[])
+                    return new ConstantCallSite(
+                            MH_adapter$constructorInvoke.bindTo(runtime).bindTo(caller)
+                    );
+                }
+            }
+        }
+
 
         if (owner == Field.class) {
             switch (methodName) {
@@ -360,9 +438,9 @@ public class ReflectionRedirectHook extends InvocationHook {
 
 
     private static class MethodUnreflectCachePool {
-        private static final ClassValue<Map<Method, MethodHandle>> unreflectMethodCache = new ClassValue<>() {
+        private static final ClassValue<Map<Member, MethodHandle>> unreflectMethodCache = new ClassValue<>() {
             @Override
-            protected Map<Method, MethodHandle> computeValue(@NotNull Class<?> type) {
+            protected Map<Member, MethodHandle> computeValue(@NotNull Class<?> type) {
                 return Collections.synchronizedMap(new WeakHashMap<>());
             }
         };

@@ -1,6 +1,7 @@
 package tests;
 
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
+import moe.karla.jvmsandbox.runtime.helper.ReflectionRedirectHook;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
 import util.InstructedTest;
 
@@ -18,9 +19,11 @@ public class ConstructTest extends InstructedTest {
     }
 
     public static class TargetClass extends TestTemplate implements Runnable {
-        public TargetClass() {
+        public TargetClass() throws Throwable {
             super(new Object());
             Thread.dumpStack();
+            Object.class.getConstructor().newInstance();
+            MethodHandles.lookup().findConstructor(Object.class, MethodType.methodType(void.class)).invoke();
         }
 
         @Override
@@ -31,6 +34,7 @@ public class ConstructTest extends InstructedTest {
 
     @Override
     protected void setup(SandboxRuntime runtime) {
+        runtime.addHook(new ReflectionRedirectHook());
         runtime.addHook(new InvocationHook() {
             @Override
             public CallSite interpretBeforeObjectConstruct(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> target, MethodType methodType) throws Throwable {
