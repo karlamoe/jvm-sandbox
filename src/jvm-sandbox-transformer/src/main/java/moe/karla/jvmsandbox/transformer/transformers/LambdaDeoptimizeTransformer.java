@@ -1,6 +1,6 @@
 package moe.karla.jvmsandbox.transformer.transformers;
 
-import moe.karla.jvmsandbox.transformer.TransformContext;
+import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
 import moe.karla.jvmsandbox.transformer.Transformer;
 import moe.karla.jvmsandbox.transformer.util.ASMUtil;
 import org.objectweb.asm.ConstantDynamic;
@@ -17,7 +17,7 @@ import java.util.Map;
 
 public class LambdaDeoptimizeTransformer extends Transformer {
     @Override
-    public ClassNode transform(ClassNode node, TransformContext context) throws Throwable {
+    public ClassNode transform(ClassNode node, ApplicationTransformContext context) throws Throwable {
         var prefix = "$$redirect$$" + node.name.substring(node.name.lastIndexOf('/') + 1) + "$$access$$deoptimize$$";
         var trans = new Object() {
             private final Map<String, Integer> counters = new HashMap<>();

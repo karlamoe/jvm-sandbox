@@ -1,6 +1,6 @@
 package moe.karla.jvmsandbox.transformer.transformers;
 
-import moe.karla.jvmsandbox.transformer.TransformContext;
+import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
 import moe.karla.jvmsandbox.transformer.Transformer;
 import moe.karla.jvmsandbox.transformer.analysis.UninitializedRef;
 import moe.karla.jvmsandbox.transformer.analysis.UninitializedThis;
@@ -15,7 +15,7 @@ public class AllocPreProcessTransformer extends Transformer {
 
 
     @Override
-    public ClassNode transform(ClassNode node, TransformContext context) throws Throwable {
+    public ClassNode transform(ClassNode node, ApplicationTransformContext context) throws Throwable {
         class VFrame extends Frame<BasicValue> {
             public VFrame(int numLocals, int maxStack) {
                 super(numLocals, maxStack);

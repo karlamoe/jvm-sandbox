@@ -1,5 +1,6 @@
 package moe.karla.jvmsandbox.transformer;
 
+import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
 import org.objectweb.asm.tree.ClassNode;
 
 public class TransformerChain extends Transformer {
@@ -10,7 +11,7 @@ public class TransformerChain extends Transformer {
     }
 
     @Override
-    public ClassNode transform(ClassNode node, TransformContext context) throws Throwable {
+    public ClassNode transform(ClassNode node, ApplicationTransformContext context) throws Throwable {
         for (var transformer : transformers) {
             var newNode = transformer.transform(node, context);
 

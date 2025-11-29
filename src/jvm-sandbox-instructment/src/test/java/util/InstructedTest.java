@@ -3,8 +3,8 @@ package util;
 import moe.karla.jvmsandbox.instructment.generator.HookWrapperGenerator;
 import moe.karla.jvmsandbox.instructment.generator.HookWrapperInterpreter;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
-import moe.karla.jvmsandbox.transformer.TransformContext;
 import moe.karla.jvmsandbox.transformer.TransformerChain;
+import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
 import moe.karla.jvmsandbox.transformer.transformers.AllocPostProcessTransformer;
 import moe.karla.jvmsandbox.transformer.transformers.AllocPreProcessTransformer;
 import moe.karla.jvmsandbox.transformer.transformers.LambdaDeoptimizeTransformer;
@@ -60,7 +60,7 @@ public abstract class InstructedTest {
         var node = new ClassNode();
         setupTargetNode(node);
 
-        TransformContext context = new TransformContext();
+        var context = new ApplicationTransformContext();
         context.interpreter = new HookWrapperInterpreter(name);
         targetNode = transformerChain().transform(node, context);
 

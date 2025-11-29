@@ -1,6 +1,6 @@
 package moe.karla.jvmsandbox.transformer.interpreter;
 
-import moe.karla.jvmsandbox.transformer.TransformContext;
+import moe.karla.jvmsandbox.transformer.context.MethodTransformContext;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
@@ -9,9 +9,7 @@ import java.util.ListIterator;
 
 public class TransformInterpreter {
     public void interpretObjectNew(
-            ClassNode klass,
-            MethodNode method,
-            TransformContext context,
+            MethodTransformContext context,
 
             ListIterator<AbstractInsnNode> iterator,
             MethodInsnNode node
@@ -29,9 +27,7 @@ public class TransformInterpreter {
     }
 
     public void interpretSuperConstructorCall(
-            ClassNode klass,
-            MethodNode method,
-            TransformContext context,
+            MethodTransformContext context,
 
             ListIterator<AbstractInsnNode> iterator,
             MethodInsnNode node
@@ -40,9 +36,7 @@ public class TransformInterpreter {
     }
 
     public void interpretMethodCall(
-            ClassNode klass,
-            MethodNode method,
-            TransformContext context,
+            MethodTransformContext context,
 
             ListIterator<AbstractInsnNode> iterator,
             MethodInsnNode node
@@ -50,9 +44,7 @@ public class TransformInterpreter {
     }
 
     public void interpretFieldCall(
-            ClassNode klass,
-            MethodNode method,
-            TransformContext context,
+            MethodTransformContext context,
 
             ListIterator<AbstractInsnNode> iterator,
             FieldInsnNode node
@@ -60,9 +52,7 @@ public class TransformInterpreter {
     }
 
     public void interpretDynamicCall(
-            ClassNode klass,
-            MethodNode method,
-            TransformContext context,
+            MethodTransformContext context,
 
             ListIterator<AbstractInsnNode> iterator,
             InvokeDynamicInsnNode node
@@ -71,9 +61,7 @@ public class TransformInterpreter {
     }
 
     public void interpretLdcInsn(
-            ClassNode klass,
-            MethodNode method,
-            TransformContext context,
+            MethodTransformContext context,
 
             ListIterator<AbstractInsnNode> iterator,
             LdcInsnNode node

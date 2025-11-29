@@ -1,7 +1,8 @@
 package moe.karla.jvmsandbox.instructment.generator;
 
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
-import moe.karla.jvmsandbox.transformer.TransformContext;
+import moe.karla.jvmsandbox.transformer.context.MethodTransformContext;
+import moe.karla.jvmsandbox.transformer.context.TransformContext;
 import moe.karla.jvmsandbox.transformer.interpreter.TransformInterpreter;
 import moe.karla.jvmsandbox.transformer.util.ASMUtil;
 import org.objectweb.asm.*;
@@ -174,16 +175,16 @@ public class HookWrapperInterpreter extends TransformInterpreter {
     }
 
     @Override
-    public void interpretObjectNew(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
+    public void interpretObjectNew(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
         replaceAsTargetInvokeDynamic(
-                klass, method, context, iterator,
+                context.klass, context.method, context, iterator,
                 "_", node.desc, NAME_HOOK_NORMAL, DESC_HOOK_NORMAL,
                 Type.getObjectType(node.owner),
                 MethodHandleInfo.REF_newInvokeSpecial
         );
     }
 
-    protected boolean shouldSkipInterpretMethodCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
+    protected boolean shouldSkipInterpretMethodCall(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
         if ("java/lang/invoke/MethodHandle".equals(node.owner)) {
             // meaningless
             return node.name.equals("invoke") || node.name.equals("invokeExact");
@@ -193,21 +194,21 @@ public class HookWrapperInterpreter extends TransformInterpreter {
     }
 
     @Override
-    public void interpretMethodCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
-        if (shouldSkipInterpretMethodCall(klass, method, context, iterator, node)) {
+    public void interpretMethodCall(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) {
+        if (shouldSkipInterpretMethodCall(context, iterator, node)) {
             return;
         }
 
         if (node.getOpcode() == Opcodes.INVOKESTATIC) {
             replaceAsTargetInvokeDynamic(
-                    klass, method, context, iterator,
+                    context.klass, context.method, context, iterator,
                     node.name, node.desc, NAME_HOOK_NORMAL, DESC_HOOK_NORMAL,
                     Type.getObjectType(node.owner),
                     MethodHandleInfo.REF_invokeStatic
             );
         } else {
             replaceAsTargetInvokeDynamic(
-                    klass, method, context, iterator,
+                    context.klass, context.method, context, iterator,
                     node.name,
                     "(L" + node.owner + ";" + node.desc.substring(1),
                     NAME_HOOK_NORMAL,
@@ -224,9 +225,9 @@ public class HookWrapperInterpreter extends TransformInterpreter {
     }
 
     @Override
-    public void interpretFieldCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, FieldInsnNode node) {
+    public void interpretFieldCall(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, FieldInsnNode node) {
         replaceAsTargetInvokeDynamic(
-                klass, method, context, iterator,
+                context.klass, context.method, context, iterator,
                 node.name,
                 switch (node.getOpcode()) {
                     case Opcodes.GETFIELD -> "(L" + node.owner + ";)" + node.desc;
@@ -249,9 +250,12 @@ public class HookWrapperInterpreter extends TransformInterpreter {
     }
 
     @Override
-    public void interpretSuperConstructorCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) throws Throwable {
-        super.interpretSuperConstructorCall(klass, method, context, iterator, node);
+    public void interpretSuperConstructorCall(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, MethodInsnNode node) throws Throwable {
+        super.interpretSuperConstructorCall(context, iterator, node);
         iterator.previous();
+
+        var method = context.method;
+        var klass = context.klass;
 
         var frames = new Analyzer<>(new BasicInterpreter()).analyze(klass.name, method);
         var index = method.instructions.indexOf(node);
@@ -299,7 +303,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
 
 
     protected List<Object> packBootstrapWithArguments(
-            ClassNode klass, MethodNode method, TransformContext context,
+            MethodTransformContext context,
             Handle bsm, Object[] bsmArgs
     ) {
 
@@ -309,7 +313,7 @@ public class HookWrapperInterpreter extends TransformInterpreter {
         args.add(Type.getMethodType(bsm.getDesc()));
         if (bsmArgs != null) {
             for (var arg : bsmArgs) {
-                args.add(interpretLdcValue(klass, method, context, arg));
+                args.add(interpretLdcValue(context, arg));
             }
         }
 
@@ -317,27 +321,27 @@ public class HookWrapperInterpreter extends TransformInterpreter {
     }
 
     @Override
-    public void interpretDynamicCall(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, InvokeDynamicInsnNode node) {
+    public void interpretDynamicCall(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, InvokeDynamicInsnNode node) {
         replaceAsTargetInvokeDynamic(
-                klass, method, context, iterator,
+                context.klass, context.method, context, iterator,
                 node.name,
                 node.desc,
                 NAME_HOOK_DYNAMIC,
                 DESC_HOOK_DYNAMIC,
                 packBootstrapWithArguments(
-                        klass, method, context,
+                        context,
                         node.bsm, node.bsmArgs
                 ).toArray()
         );
     }
 
     @Override
-    public void interpretLdcInsn(ClassNode klass, MethodNode method, TransformContext context, ListIterator<AbstractInsnNode> iterator, LdcInsnNode node) {
-        node.cst = interpretLdcValue(klass, method, context, node.cst);
+    public void interpretLdcInsn(MethodTransformContext context, ListIterator<AbstractInsnNode> iterator, LdcInsnNode node) {
+        node.cst = interpretLdcValue(context, node.cst);
     }
 
     public Object interpretLdcValue(
-            ClassNode klass, MethodNode method, TransformContext context,
+            MethodTransformContext context,
             Object value
     ) {
         if (value instanceof ConstantDynamic dynamic) {
@@ -348,17 +352,17 @@ public class HookWrapperInterpreter extends TransformInterpreter {
                             NAME_HOOK_DYNAMIC_CONSTANT, DESC_HOOK_DYNAMIC_CONSTANT,
                             false),
                     packBootstrapWithArguments(
-                            klass, method, context,
+                            context,
                             dynamic.getBootstrapMethod(),
                             (Object[]) interpretLdcValue(
-                                    klass, method, context,
+                                    context,
                                     ASMUtil.getBSMArguments(dynamic)
                             )
                     ).toArray()
             );
         } else if (value instanceof Object[] array) {
             for (var i = 0; i < array.length; i++) {
-                array[i] = interpretLdcValue(klass, method, context, array[i]);
+                array[i] = interpretLdcValue(context, array[i]);
             }
         }
         return value;
