@@ -26,7 +26,11 @@ public class ReflectionRedirectHook extends InvocationHook {
     private static final MethodHandle MH_adapter$constructorInvoke;
     private static final MethodHandle MH_adapter$classNewInstance;
     private static final MethodHandle MH_adapter$unreflect;
+    private static final MethodHandle MH_adapter$unreflectConstructor;
+    private static final MethodHandle MH_adapter$unreflectField;
+    private static final MethodHandle MH_adapter$unreflectVarHandle;
     private static final MethodHandle MH_adapter$Field$getOrSet;
+    private static final MethodHandle MH_adapter$findVarHandle;
     private static final MethodHandle MH_adapter$revealDirect;
 
     static {
@@ -53,7 +57,11 @@ public class ReflectionRedirectHook extends InvocationHook {
             MH_adapter$constructorInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$constructorInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Constructor.class, Object[].class));
             MH_adapter$classNewInstance = lookup.findStatic(ReflectionRedirectHook.class, "adapter$classNewInstance", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class));
             MH_adapter$unreflect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflect", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class));
+            MH_adapter$unreflectConstructor = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectConstructor", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Constructor.class));
+            MH_adapter$unreflectField = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectField", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, boolean.class, MethodHandles.Lookup.class, Field.class));
+            MH_adapter$unreflectVarHandle = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectVarHandle", MethodType.methodType(VarHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Field.class));
             MH_adapter$Field$getOrSet = lookup.findStatic(ReflectionRedirectHook.class, "adapter$Field$getOrSet", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, boolean.class, Class.class, Field.class));
+            MH_adapter$findVarHandle = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findVarHandle", MethodType.methodType(VarHandle.class, SandboxRuntime.class, boolean.class, MethodHandles.Lookup.class, Class.class, String.class, Class.class));
             MH_adapter$revealDirect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$revealDirect", MethodType.methodType(MethodHandleInfo.class, SandboxRuntime.class, MethodHandles.Lookup.class, MethodHandle.class));
         } catch (Throwable ex) {
             throw new ExceptionInInitializerError(ex);
@@ -110,6 +118,14 @@ public class ReflectionRedirectHook extends InvocationHook {
 
             default -> throw new AssertionError();
         };
+    }
+
+    private static VarHandle adapter$findVarHandle(SandboxRuntime runtime, boolean isStatic, MethodHandles.Lookup caller, Class<?> target, String name, Class<?> type) throws Throwable {
+        return (VarHandle) runtime.interpretInvoke(
+                caller, target, name, MethodType.methodType(type),
+                isStatic ? InvokeHelper.EXREF_varhandleStatic : InvokeHelper.EXREF_varhandleField,
+                new RuntimeResolvationInfo(type, null, null)
+        ).dynamicInvoker().invoke();
     }
 
     private static MethodHandle adapter$unreflect(SandboxRuntime runtime, MethodHandles.Lookup caller, Method method) throws Throwable {
@@ -191,6 +207,17 @@ public class ReflectionRedirectHook extends InvocationHook {
                 ).dynamicInvoker();
             }
         }
+    }
+
+    private static VarHandle adapter$unreflectVarHandle(SandboxRuntime runtime, MethodHandles.Lookup caller, Field field) throws Throwable {
+        return (VarHandle) runtime.interpretInvoke(
+                caller,
+                field.getDeclaringClass(),
+                field.getName(),
+                MethodType.methodType(field.getType()),
+                InvokeHelper.EXREF_varhandleField,
+                new RuntimeResolvationInfo(field.getType(), field, null)
+        ).dynamicInvoker().invoke();
     }
 
     private static Object adapter$methodInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Method method, Object thiz, Object[] args) throws Throwable {
@@ -350,10 +377,10 @@ public class ReflectionRedirectHook extends InvocationHook {
 
 
                 case "findVarHandle" -> {
-                    // TODO
+                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, false));
                 }
                 case "findStaticVarHandle" -> {
-                    // TODO
+                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, true));
                 }
 
 
@@ -363,12 +390,16 @@ public class ReflectionRedirectHook extends InvocationHook {
                 case "unreflectSpecial" -> {
                 }
                 case "unreflectConstructor" -> {
+                    return new ConstantCallSite(MH_adapter$unreflectConstructor.bindTo(runtime));
                 }
                 case "unreflectGetter" -> {
+                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectField, 0, runtime, true));
                 }
                 case "unreflectSetter" -> {
+                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectField, 0, runtime, false));
                 }
                 case "unreflectVarHandle" -> {
+                    return new ConstantCallSite(MH_adapter$unreflectVarHandle.bindTo(runtime));
                 }
                 case "revealDirect" -> {
                     return new ConstantCallSite(MH_adapter$revealDirect.bindTo(runtime));
