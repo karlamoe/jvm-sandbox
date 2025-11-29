@@ -532,24 +532,17 @@ public class ReflectionRedirectHook extends InvocationHook {
 
 
     private static final class MethodUnreflectCachePool {
-        private static final ClassValue<Map<Member, MethodHandle>> unreflectMethodCache = new ClassValue<>() {
+        private static class CacheMapClassValue<T extends Member> extends ClassValue<Map<T, MethodHandle>> {
             @Override
-            protected Map<Member, MethodHandle> computeValue(@NotNull Class<?> type) {
+            protected Map<T, MethodHandle> computeValue(@NotNull Class<?> type) {
                 return Collections.synchronizedMap(new WeakHashMap<>());
             }
-        };
-        private static final ClassValue<Map<Field, MethodHandle>> unreflectFieldGetterCache = new ClassValue<>() {
-            @Override
-            protected Map<Field, MethodHandle> computeValue(@NotNull Class<?> type) {
-                return Collections.synchronizedMap(new WeakHashMap<>());
-            }
-        };
-        private static final ClassValue<Map<Field, MethodHandle>> unreflectFieldSetterCache = new ClassValue<>() {
-            @Override
-            protected Map<Field, MethodHandle> computeValue(@NotNull Class<?> type) {
-                return Collections.synchronizedMap(new WeakHashMap<>());
-            }
-        };
+        }
+
+        private static final ClassValue<Map<Member, MethodHandle>> unreflectMethodCache = new CacheMapClassValue<>();
+
+        private static final ClassValue<Map<Field, MethodHandle>> unreflectFieldGetterCache = new CacheMapClassValue<>();
+        private static final ClassValue<Map<Field, MethodHandle>> unreflectFieldSetterCache = new CacheMapClassValue<>();
     }
 
     private static final Symbol SYMBOL_SANDBOX_HANDLES_CACHE = new Symbol("SandboxHandlesCache");
