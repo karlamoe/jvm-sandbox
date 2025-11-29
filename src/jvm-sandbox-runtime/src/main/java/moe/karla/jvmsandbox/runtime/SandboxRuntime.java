@@ -5,18 +5,22 @@ import moe.karla.jvmsandbox.runtime.hooks.InvocationHookChain;
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
 import moe.karla.jvmsandbox.runtime.util.ReflectionCache;
 import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
+import moe.karla.jvmsandbox.runtime.util.Symbol;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.invoke.*;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SandboxRuntime {
     private final Collection<InvocationHook> hooks;
     private final InvocationHookChain chain;
 
     public final ReflectionCache reflectionCache = new ReflectionCache();
+    public final Map<Symbol, Object> runtimeCache = new ConcurrentHashMap<>();
 
     public SandboxRuntime() {
         this(new ArrayList<>());

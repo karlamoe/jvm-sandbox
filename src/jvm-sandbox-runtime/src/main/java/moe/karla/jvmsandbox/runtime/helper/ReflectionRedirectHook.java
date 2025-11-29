@@ -4,6 +4,7 @@ import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
 import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
+import moe.karla.jvmsandbox.runtime.util.Symbol;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.invoke.*;
@@ -325,114 +326,143 @@ public class ReflectionRedirectHook extends InvocationHook {
     ) throws Throwable {
         var result = interpretInvoke0(runtime, caller, owner, methodName, desc, refType, callInfo);
         if (result != null && callInfo != null) {
-            runtime.reflectionCache.pushFakedSource(result.getTarget(),
+            runtime.reflectionCache.pushFakedSource(result,
                     InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo)
             );
         }
 
-        return result;
+        if (result != null) return new ConstantCallSite(result);
+        return null;
     }
 
     @SuppressWarnings("SwitchStatementWithTooFewBranches")
-    public CallSite interpretInvoke0(
+    public MethodHandle interpretInvoke0(
             SandboxRuntime runtime, MethodHandles.Lookup caller,
             Class<?> owner, String methodName, MethodType desc,
             int refType, RuntimeResolvationInfo callInfo
     ) throws Throwable {
         if (owner == MethodHandles.Lookup.class) {
+            var cache = getCache(runtime);
             switch (methodName) {
 
                 // invokes
                 case "findStatic" -> {
                     // Lookup.(Class<?>, String, MethodType)MethodHandle
-                    return new ConstantCallSite(MH_adapter$findStatic.bindTo(runtime));
+                    if (cache.lookup$findStatic != null) return cache.lookup$findStatic;
+
+                    return cache.lookup$findStatic = MH_adapter$findStatic.bindTo(runtime);
                 }
                 case "findVirtual" -> {
                     // Lookup.(Class<?>, String name, MethodType)MethodHandle
-                    return new ConstantCallSite(MH_adapter$findVirtual.bindTo(runtime));
+                    if (cache.lookup$findVirtual != null) return cache.lookup$findVirtual;
 
+                    return cache.lookup$findVirtual = MH_adapter$findVirtual.bindTo(runtime);
                 }
                 case "findConstructor" -> {
                     // Lookup.(Class<?>, MethodType)MethodHandle
-                    return new ConstantCallSite(MH_adapter$findConstructor.bindTo(runtime));
+                    if (cache.lookup$findConstructor != null) return cache.lookup$findConstructor;
+
+                    return cache.lookup$findConstructor = MH_adapter$findConstructor.bindTo(runtime);
                 }
                 case "findSpecial" -> {
                     // Lookup.(Class<?>, String, MethodType, Class<?>)MethodHandle
-                    return new ConstantCallSite(MH_adapter$findSpecial.bindTo(runtime));
+                    if (cache.lookup$findSpecial != null) return cache.lookup$findSpecial;
+
+                    return cache.lookup$findSpecial = MH_adapter$findSpecial.bindTo(runtime);
                 }
 
                 // fields
                 case "findGetter" -> {
-                    return new ConstantCallSite(MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_getField));
+                    if (cache.lookup$findGetter != null) return cache.lookup$findGetter;
+
+                    return cache.lookup$findGetter = MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_getField);
                 }
                 case "findSetter" -> {
-                    return new ConstantCallSite(MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_putField));
+                    if (cache.lookup$findSetter != null) return cache.lookup$findSetter;
+
+                    return cache.lookup$findSetter = MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_putField);
                 }
                 case "findStaticGetter" -> {
-                    return new ConstantCallSite(MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_getStatic));
+                    if (cache.lookup$findStaticGetter != null) return cache.lookup$findStaticGetter;
+
+                    return cache.lookup$findStaticGetter = MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_getStatic);
                 }
                 case "findStaticSetter" -> {
-                    return new ConstantCallSite(MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_putStatic));
+                    if (cache.lookup$findStaticSetter != null) return cache.lookup$findStaticSetter;
+
+                    return cache.lookup$findStaticSetter = MH_adapter$findGetterSetter.bindTo(runtime).bindTo(MethodHandleInfo.REF_putStatic);
                 }
 
 
                 case "findVarHandle" -> {
-                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, false));
+                    if (cache.lookup$findVarHandle != null) return cache.lookup$findVarHandle;
+
+                    return cache.lookup$findVarHandle = MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, false);
                 }
                 case "findStaticVarHandle" -> {
-                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, true));
+                    if (cache.lookup$findStaticVarHandle != null) return cache.lookup$findStaticVarHandle;
+                    return cache.lookup$findStaticVarHandle = MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, true);
                 }
 
 
                 case "unreflect" -> {
-                    return new ConstantCallSite(MH_adapter$unreflect.bindTo(runtime));
+                    if (cache.lookup$unreflect != null) return cache.lookup$unreflect;
+                    return cache.lookup$unreflect = MH_adapter$unreflect.bindTo(runtime);
                 }
                 case "unreflectSpecial" -> {
                 }
                 case "unreflectConstructor" -> {
-                    return new ConstantCallSite(MH_adapter$unreflectConstructor.bindTo(runtime));
+                    if (cache.lookup$unreflectConstructor != null) return cache.lookup$unreflectConstructor;
+
+                    return cache.lookup$unreflectConstructor = MH_adapter$unreflectConstructor.bindTo(runtime);
                 }
                 case "unreflectGetter" -> {
-                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectField, 0, runtime, true));
+                    if (cache.lookup$unreflectGetter != null) return cache.lookup$unreflectGetter;
+
+                    return cache.lookup$unreflectGetter = MethodHandles.insertArguments(MH_adapter$unreflectField, 0, runtime, true);
                 }
                 case "unreflectSetter" -> {
-                    return new ConstantCallSite(MethodHandles.insertArguments(MH_adapter$unreflectField, 0, runtime, false));
+                    if (cache.lookup$unreflectSetter != null) return cache.lookup$unreflectSetter;
+                    return cache.lookup$unreflectSetter = MethodHandles.insertArguments(MH_adapter$unreflectField, 0, runtime, false);
                 }
                 case "unreflectVarHandle" -> {
-                    return new ConstantCallSite(MH_adapter$unreflectVarHandle.bindTo(runtime));
+                    if (cache.lookup$unreflectVarHandle != null) return cache.lookup$unreflectVarHandle;
+
+                    return cache.lookup$unreflectVarHandle = MH_adapter$unreflectVarHandle.bindTo(runtime);
                 }
                 case "revealDirect" -> {
-                    return new ConstantCallSite(MH_adapter$revealDirect.bindTo(runtime));
+                    if (cache.lookup$revealDirect != null) return cache.lookup$revealDirect;
+                    return cache.lookup$revealDirect = MH_adapter$revealDirect.bindTo(runtime);
                 }
             }
         }
 
         if (owner == Method.class) {
+            var cache = getCache(runtime);
             switch (methodName) {
                 case "invoke" -> {
                     // Method.(Object, Object[])
-                    return new ConstantCallSite(
-                            MethodHandles.insertArguments(MH_adapter$methodInvoke, 0, runtime, caller)
-                    );
+                    if (cache.method$invoke != null) return cache.method$invoke;
+                    return cache.method$invoke = MethodHandles.insertArguments(MH_adapter$methodInvoke, 0, runtime, caller);
                 }
             }
         }
         if (owner == Constructor.class) {
+            var cache = getCache(runtime);
             switch (methodName) {
                 case "newInstance" -> {
                     // Constructor.(Object[])
-                    return new ConstantCallSite(
-                            MethodHandles.insertArguments(MH_adapter$constructorInvoke, 0, runtime, caller)
-                    );
+                    if (cache.constructor$newInstance != null) return cache.constructor$newInstance;
+                    return cache.constructor$newInstance = MethodHandles.insertArguments(MH_adapter$constructorInvoke, 0, runtime, caller);
                 }
             }
         }
         if (owner == Class.class) {
+            var cache = getCache(runtime);
             switch (methodName) {
                 case "newInstance" -> {
-                    return new ConstantCallSite(
-                            MethodHandles.insertArguments(MH_adapter$classNewInstance, 0, runtime, caller)
-                    );
+                    if (cache.class$newInstance != null) return cache.class$newInstance;
+                    return cache.class$newInstance = MethodHandles.insertArguments(MH_adapter$classNewInstance, 0, runtime, caller);
                 }
             }
         }
@@ -449,12 +479,10 @@ public class ReflectionRedirectHook extends InvocationHook {
                             runtime, caller, true, desc.returnType()
                     );
 
-                    return new ConstantCallSite(
-                            MethodHandles.filterArguments(
-                                    invoker,
-                                    0,
-                                    mapper
-                            )
+                    return MethodHandles.filterArguments(
+                            invoker,
+                            0,
+                            mapper
                     );
                 }
                 case "set", "setBoolean", "setByte", "setChar", "setShort", "setInt", "setLong", "setFloat",
@@ -468,12 +496,10 @@ public class ReflectionRedirectHook extends InvocationHook {
                             runtime, caller, false, desc.lastParameterType()
                     );
 
-                    return new ConstantCallSite(
-                            MethodHandles.filterArguments(
-                                    invoker,
-                                    0,
-                                    mapper
-                            )
+                    return MethodHandles.filterArguments(
+                            invoker,
+                            0,
+                            mapper
                     );
                 }
             }
@@ -483,7 +509,7 @@ public class ReflectionRedirectHook extends InvocationHook {
     }
 
 
-    private static class MethodUnreflectCachePool {
+    private static final class MethodUnreflectCachePool {
         private static final ClassValue<Map<Member, MethodHandle>> unreflectMethodCache = new ClassValue<>() {
             @Override
             protected Map<Member, MethodHandle> computeValue(@NotNull Class<?> type) {
@@ -502,5 +528,42 @@ public class ReflectionRedirectHook extends InvocationHook {
                 return Collections.synchronizedMap(new WeakHashMap<>());
             }
         };
+    }
+
+    private static final Symbol SYMBOL_SANDBOX_HANDLES_CACHE = new Symbol("SandboxHandlesCache");
+
+    private static SandboxHandlesCache getCache(SandboxRuntime runtime) {
+        final var runtimeCache = runtime.runtimeCache;
+        var result = runtimeCache.get(SYMBOL_SANDBOX_HANDLES_CACHE);
+        if (result != null) return (SandboxHandlesCache) result;
+
+        result = new SandboxHandlesCache();
+        var cached = runtimeCache.putIfAbsent(SYMBOL_SANDBOX_HANDLES_CACHE, result);
+        if (cached != null) return (SandboxHandlesCache) cached;
+        return (SandboxHandlesCache) result;
+    }
+
+    private static final class SandboxHandlesCache {
+        MethodHandle lookup$findStatic;
+        MethodHandle lookup$findVirtual;
+        MethodHandle lookup$findConstructor;
+        MethodHandle lookup$findSpecial;
+        MethodHandle lookup$findGetter;
+        MethodHandle lookup$findSetter;
+        MethodHandle lookup$findStaticGetter;
+        MethodHandle lookup$findStaticSetter;
+        MethodHandle lookup$findVarHandle;
+        MethodHandle lookup$findStaticVarHandle;
+        MethodHandle lookup$unreflect;
+        MethodHandle lookup$unreflectSpecial;
+        MethodHandle lookup$unreflectConstructor;
+        MethodHandle lookup$unreflectGetter;
+        MethodHandle lookup$unreflectSetter;
+        MethodHandle lookup$unreflectVarHandle;
+        MethodHandle lookup$revealDirect;
+
+        MethodHandle method$invoke;
+        MethodHandle constructor$newInstance;
+        MethodHandle class$newInstance;
     }
 }
