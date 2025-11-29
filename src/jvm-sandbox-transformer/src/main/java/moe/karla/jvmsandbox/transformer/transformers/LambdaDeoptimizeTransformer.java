@@ -1,7 +1,7 @@
 package moe.karla.jvmsandbox.transformer.transformers;
 
-import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
 import moe.karla.jvmsandbox.transformer.Transformer;
+import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
 import moe.karla.jvmsandbox.transformer.util.ASMUtil;
 import org.objectweb.asm.ConstantDynamic;
 import org.objectweb.asm.Handle;
@@ -22,6 +22,28 @@ public class LambdaDeoptimizeTransformer extends Transformer {
         var trans = new Object() {
             private final Map<String, Integer> counters = new HashMap<>();
 
+            private boolean isSelfReference(Handle handle) {
+                if (!handle.getOwner().equals(node.name)) return false;
+
+
+                return switch (handle.getTag()) {
+                    case Opcodes.H_INVOKEINTERFACE,
+                         Opcodes.H_INVOKEVIRTUAL,
+                         Opcodes.H_INVOKESPECIAL,
+                         Opcodes.H_INVOKESTATIC,
+                         Opcodes.H_NEWINVOKESPECIAL -> ASMUtil.getMethod(
+                            node, handle.getName(), handle.getDesc()
+                    ) != null;
+
+                    case Opcodes.H_GETFIELD, Opcodes.H_PUTFIELD,
+                         Opcodes.H_GETSTATIC, Opcodes.H_PUTSTATIC -> ASMUtil.getField(
+                            node, handle.getName(), handle.getDesc()
+                    ) != null;
+
+                    default -> false;
+                };
+            }
+
             public Object proc(Object cst) {
                 if (cst instanceof ConstantDynamic dynamic) {
                     var newBsmArgs = ASMUtil.getBSMArguments(dynamic);
@@ -34,7 +56,7 @@ public class LambdaDeoptimizeTransformer extends Transformer {
                     );
                 } else if (cst instanceof Handle handle) {
                     // self reference.
-                    if (handle.getOwner().equals(node.name)) return handle;
+                    if (isSelfReference(handle)) return handle;
 
                     var hash = handle.getTag() + ',' + handle.getOwner() + '.' + handle.getName() + handle.getDesc();
 
