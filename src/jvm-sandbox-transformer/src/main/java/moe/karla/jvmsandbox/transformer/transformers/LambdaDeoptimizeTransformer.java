@@ -86,7 +86,7 @@ public class LambdaDeoptimizeTransformer extends Transformer {
                         counters.put(hash, accCount);
 
                         var mv = node.visitMethod(
-                                Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL | Opcodes.ACC_STATIC | Opcodes.ACC_SYNTHETIC,
+                                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_SYNTHETIC,
                                 prefix + accCount, paddedMethodDesc, null, null
                         );
                         switch (handle.getTag()) {
