@@ -27,6 +27,7 @@ public class ReflectionRedirectHook extends InvocationHook {
     private static final MethodHandle MH_adapter$constructorInvoke;
     private static final MethodHandle MH_adapter$classNewInstance;
     private static final MethodHandle MH_adapter$unreflect;
+    private static final MethodHandle MH_adapter$unreflectSpecial;
     private static final MethodHandle MH_adapter$unreflectConstructor;
     private static final MethodHandle MH_adapter$unreflectField;
     private static final MethodHandle MH_adapter$unreflectVarHandle;
@@ -58,6 +59,7 @@ public class ReflectionRedirectHook extends InvocationHook {
             MH_adapter$constructorInvoke = lookup.findStatic(ReflectionRedirectHook.class, "adapter$constructorInvoke", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Constructor.class, Object[].class));
             MH_adapter$classNewInstance = lookup.findStatic(ReflectionRedirectHook.class, "adapter$classNewInstance", MethodType.methodType(Object.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class));
             MH_adapter$unreflect = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflect", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class));
+            MH_adapter$unreflectSpecial = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectSpecial", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Method.class, Class.class));
             MH_adapter$unreflectConstructor = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectConstructor", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Constructor.class));
             MH_adapter$unreflectField = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectField", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, boolean.class, MethodHandles.Lookup.class, Field.class));
             MH_adapter$unreflectVarHandle = lookup.findStatic(ReflectionRedirectHook.class, "adapter$unreflectVarHandle", MethodType.methodType(VarHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Field.class));
@@ -157,6 +159,21 @@ public class ReflectionRedirectHook extends InvocationHook {
                     )
             ).dynamicInvoker();
         }
+    }
+
+    private static MethodHandle adapter$unreflectSpecial(SandboxRuntime runtime, MethodHandles.Lookup caller, Method method, Class<?> specialCaller) throws Throwable {
+        return runtime.interpretInvoke(
+                caller, method.getDeclaringClass(), method.getName(),
+                MethodType.methodType(
+                        method.getReturnType(), method.getDeclaringClass(), method.getParameterTypes()
+                ),
+                MethodHandleInfo.REF_invokeSpecial,
+                new RuntimeResolvationInfo(
+                        MethodType.methodType(
+                                method.getReturnType(), method.getParameterTypes()
+                        ), method, specialCaller
+                )
+        ).dynamicInvoker();
     }
 
     private static MethodHandle adapter$unreflectConstructor(SandboxRuntime runtime, MethodHandles.Lookup caller, Constructor<?> constructor) throws Throwable {
@@ -397,19 +414,24 @@ public class ReflectionRedirectHook extends InvocationHook {
                 case "findVarHandle" -> {
                     if (cache.lookup$findVarHandle != null) return cache.lookup$findVarHandle;
 
-                    return cache.lookup$findVarHandle = MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, false);
+                    return cache.lookup$findVarHandle = MethodHandles.insertArguments(MH_adapter$findVarHandle, 0, runtime, false);
                 }
                 case "findStaticVarHandle" -> {
                     if (cache.lookup$findStaticVarHandle != null) return cache.lookup$findStaticVarHandle;
-                    return cache.lookup$findStaticVarHandle = MethodHandles.insertArguments(MH_adapter$unreflectVarHandle, 0, runtime, true);
+
+                    return cache.lookup$findStaticVarHandle = MethodHandles.insertArguments(MH_adapter$findVarHandle, 0, runtime, true);
                 }
 
 
                 case "unreflect" -> {
                     if (cache.lookup$unreflect != null) return cache.lookup$unreflect;
+
                     return cache.lookup$unreflect = MH_adapter$unreflect.bindTo(runtime);
                 }
                 case "unreflectSpecial" -> {
+                    if (cache.lookup$unreflectSpecial != null) return cache.lookup$unreflectSpecial;
+
+                    return cache.lookup$unreflectSpecial = MH_adapter$unreflectSpecial.bindTo(runtime);
                 }
                 case "unreflectConstructor" -> {
                     if (cache.lookup$unreflectConstructor != null) return cache.lookup$unreflectConstructor;
