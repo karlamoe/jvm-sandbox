@@ -1,6 +1,9 @@
 package moe.karla.jvmsandbox.transformer.util;
 
 import org.objectweb.asm.*;
+import org.objectweb.asm.tree.*;
+
+import java.util.function.Consumer;
 
 public class ASMUtil {
     public static void generateConstructor(ClassVisitor visitor, String superKlass) {
@@ -55,5 +58,61 @@ public class ASMUtil {
 
     public static void getLookup(MethodVisitor mv) {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MethodHandles", "lookup", "()Ljava/lang/invoke/MethodHandles$Lookup;", false);
+    }
+
+    public static AbstractInsnNode pushInvokeDynamic(
+            ClassNode klass,
+            boolean noInvokeDynamic,
+            String methodName, String methodDesc,
+            Handle bsm, Object[] bsmArgs
+    ) {
+        if (!noInvokeDynamic && klass.version >= Opcodes.V1_8) {
+            return new InvokeDynamicInsnNode(methodName, methodDesc, bsm, bsmArgs);
+        }
+        return InvokeDynamicFaker.pushInvokeDynamic(klass, methodName, methodDesc, bsm, bsmArgs);
+    }
+
+
+    public static MethodNode getMethod(ClassNode node, String name, String desc) {
+        if (node.methods == null) return null;
+        for (var method : node.methods) {
+            if (name != null && !name.equals(method.name)) continue;
+            if (desc != null && !desc.equals(method.desc)) continue;
+
+            return method;
+        }
+        return null;
+    }
+
+    public static FieldNode getField(ClassNode node, String name, String desc) {
+        if (node.methods == null) return null;
+        for (var field : node.fields) {
+            if (name != null && !name.equals(field.name)) continue;
+            if (desc != null && !desc.equals(field.desc)) continue;
+
+            return field;
+        }
+        return null;
+    }
+
+    public static void pushClinit(ClassNode klass, Consumer<MethodVisitor> mv) {
+        var clinit = getMethod(klass, "<clinit>", "()V");
+        if (clinit == null) {
+            var met = klass.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+            mv.accept(met);
+            met.visitInsn(Opcodes.RETURN);
+        } else {
+            var met = new MethodNode();
+            met.tryCatchBlocks = clinit.tryCatchBlocks;
+            met.localVariables = clinit.localVariables;
+
+            mv.accept(met);
+            clinit.instructions.insertBefore(
+                    clinit.instructions.getFirst(),
+                    met.instructions
+            );
+            clinit.maxLocals = Math.max(clinit.maxLocals, met.maxLocals);
+            clinit.maxStack = Math.max(clinit.maxStack, met.maxStack);
+        }
     }
 }

@@ -62,6 +62,7 @@ public abstract class InstructedTest {
 
         var context = new ApplicationTransformContext();
         context.interpreter = new HookWrapperInterpreter(name);
+        setupContext(context, name);
         targetNode = transformerChain().transform(node, context);
 
         var result = new StringWriter();
@@ -87,6 +88,9 @@ public abstract class InstructedTest {
             );
             targetClass = defineClass(null, bytecode, 0, bytecode.length);
         }};
+    }
+
+    protected void setupContext(ApplicationTransformContext context, String targetClass) {
     }
 
     protected TransformerChain transformerChain() {
