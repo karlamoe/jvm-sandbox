@@ -3,22 +3,22 @@ package moe.karla.jvmsandbox.runtime.util;
 import java.lang.invoke.MethodHandle;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Supplier;
 
 public class ReflectionCache {
     private final Map<MethodHandle, MethodHandle> handlesForwarder = new WeakHashMap<>();
-    private final Map<MethodHandle, Supplier<MethodHandle>> handlesFaker = new WeakHashMap<>();
+    private final Map<MethodHandle, Callable<MethodHandle>> handlesFaker = new WeakHashMap<>();
 
     private final ReadWriteLock fakerLocker = new ReentrantReadWriteLock();
 
-    public MethodHandle getFakedRealHandle(MethodHandle handle) {
+    public MethodHandle getFakedRealHandle(MethodHandle handle) throws Exception {
         fakerLocker.readLock().lock();
         try {
             while (true) {
                 var directResult = handlesForwarder.get(handle);
-                if (directResult != null) {
+                if (directResult != null && directResult != handle) {
                     handle = directResult;
                     continue;
                 }
@@ -27,7 +27,7 @@ public class ReflectionCache {
                 if (supplier != null) {
                     fakerLocker.writeLock().lock();
                     try {
-                        var newHandle = supplier.get();
+                        var newHandle = supplier.call();
                         handlesForwarder.put(handle, newHandle);
                         handlesFaker.remove(handle); // drop supplier as already faked
                         handle = newHandle;
@@ -57,7 +57,7 @@ public class ReflectionCache {
         }
     }
 
-    public void pushFakedSource(MethodHandle result, Supplier<MethodHandle> source) {
+    public void pushFakedSource(MethodHandle result, Callable<MethodHandle> source) {
         fakerLocker.writeLock().lock();
         try {
             handlesFaker.put(result, source);

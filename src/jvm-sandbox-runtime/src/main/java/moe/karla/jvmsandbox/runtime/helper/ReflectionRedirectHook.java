@@ -1,7 +1,7 @@
 package moe.karla.jvmsandbox.runtime.helper;
 
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
-import moe.karla.jvmsandbox.runtime.hooks.InvocationHook;
+import moe.karla.jvmsandbox.runtime.hooks.FakedInvocationHook;
 import moe.karla.jvmsandbox.runtime.util.InvokeHelper;
 import moe.karla.jvmsandbox.runtime.util.RuntimeResolvationInfo;
 import moe.karla.jvmsandbox.runtime.util.Symbol;
@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
 
-public class ReflectionRedirectHook extends InvocationHook {
+public class ReflectionRedirectHook extends FakedInvocationHook {
     private static final MethodHandle MH_CallSite$dynamicInvoker;
     private static final MethodHandle MH_interpretInvoke$CallSite;
     private static final MethodHandle MH_interpretInvoke$MethodHandle;
@@ -333,23 +333,6 @@ public class ReflectionRedirectHook extends InvocationHook {
             cachePool.put(field, cachedHandle);
             return cachedHandle.asType(castType);
         }
-    }
-
-    @Override
-    public CallSite interpretInvoke(
-            SandboxRuntime runtime, MethodHandles.Lookup caller,
-            Class<?> owner, String methodName, MethodType desc,
-            int refType, RuntimeResolvationInfo callInfo
-    ) throws Throwable {
-        var result = interpretInvoke0(runtime, caller, owner, methodName, desc, refType, callInfo);
-        if (result != null && callInfo != null) {
-            runtime.reflectionCache.pushFakedSource(result,
-                    InvokeHelper.resolveMethodHandle(caller, owner, methodName, desc, refType, callInfo)
-            );
-        }
-
-        if (result != null) return new ConstantCallSite(result);
-        return null;
     }
 
     @SuppressWarnings("SwitchStatementWithTooFewBranches")
