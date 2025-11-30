@@ -8,7 +8,7 @@ import org.objectweb.asm.tree.*;
 
 import java.util.ArrayList;
 
-public class AllocPostProcessTransformer extends Transformer {
+public class PostProcessTransformer extends Transformer {
     @Override
     public ClassNode transform(ClassNode node, ApplicationTransformContext context) throws Throwable {
         var classContext = new ClassTransformContext(context, node);

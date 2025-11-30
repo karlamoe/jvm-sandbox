@@ -5,7 +5,7 @@ import moe.karla.jvmsandbox.instructment.generator.HookWrapperInterpreter;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.transformer.TransformerChain;
 import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
-import moe.karla.jvmsandbox.transformer.transformers.AllocPostProcessTransformer;
+import moe.karla.jvmsandbox.transformer.transformers.PostProcessTransformer;
 import moe.karla.jvmsandbox.transformer.transformers.AllocPreProcessTransformer;
 import moe.karla.jvmsandbox.transformer.transformers.LambdaDeoptimizeTransformer;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,7 +98,7 @@ public abstract class InstructedTest {
                 List.of(
                         new LambdaDeoptimizeTransformer(),
                         new AllocPreProcessTransformer(),
-                        new AllocPostProcessTransformer()
+                        new PostProcessTransformer()
                 )
         );
     }

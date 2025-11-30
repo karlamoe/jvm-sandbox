@@ -18,6 +18,9 @@ public class TransformInterpreter {
                 Opcodes.NEW,
                 node.owner
         ));
+        if (!node.desc.endsWith(")V")) {
+            iterator.add(new InsnNode(Opcodes.DUP));
+        }
         node.setOpcode(Opcodes.INVOKESPECIAL);
         node.name = "<init>";
         node.desc = Type.getMethodDescriptor(

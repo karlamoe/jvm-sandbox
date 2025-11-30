@@ -1,13 +1,10 @@
 package moe.karla.jvmsandbox.transformer.context;
 
-import moe.karla.jvmsandbox.transformer.interpreter.TransformInterpreter;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 public class TransformContext {
-    public TransformInterpreter interpreter = new TransformInterpreter();
     public Map<Attr<?>, Object> attributes = new ConcurrentHashMap<>();
 
     @SuppressWarnings("unchecked")
