@@ -5,12 +5,10 @@ import moe.karla.jvmsandbox.instructment.generator.HookWrapperInterpreter;
 import moe.karla.jvmsandbox.runtime.SandboxRuntime;
 import moe.karla.jvmsandbox.transformer.TransformerChain;
 import moe.karla.jvmsandbox.transformer.context.ApplicationTransformContext;
-import moe.karla.jvmsandbox.transformer.transformers.PostProcessTransformer;
 import moe.karla.jvmsandbox.transformer.transformers.AllocPreProcessTransformer;
 import moe.karla.jvmsandbox.transformer.transformers.LambdaDeoptimizeTransformer;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
+import moe.karla.jvmsandbox.transformer.transformers.PostProcessTransformer;
+import org.junit.jupiter.api.*;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
@@ -25,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public abstract class InstructedTest {
 
     SandboxRuntime runtime;
@@ -111,6 +110,7 @@ public abstract class InstructedTest {
     }
 
     @Test
+    @Order(-4444)
     protected void $$execute() throws Throwable {
         if (Runnable.class.isAssignableFrom(targetClass)) {
             ((Runnable) targetClass.newInstance()).run();
