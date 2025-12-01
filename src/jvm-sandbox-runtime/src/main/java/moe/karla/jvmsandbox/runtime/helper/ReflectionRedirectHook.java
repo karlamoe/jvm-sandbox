@@ -16,6 +16,7 @@ import java.util.WeakHashMap;
 
 public class ReflectionRedirectHook extends FakedInvocationHook {
     private static final MethodHandle MH_CallSite$dynamicInvoker;
+    private static final MethodHandle MH_InvocationTargetException$new;
     private static final MethodHandle MH_interpretInvoke$CallSite;
     private static final MethodHandle MH_interpretInvoke$MethodHandle;
     private static final MethodHandle MH_adapter$findConstructor;
@@ -48,6 +49,10 @@ public class ReflectionRedirectHook extends FakedInvocationHook {
             MH_interpretInvoke$MethodHandle = MethodHandles.filterReturnValue(
                     MH_interpretInvoke$CallSite,
                     MH_CallSite$dynamicInvoker
+            );
+            MH_InvocationTargetException$new = lookup.findConstructor(
+                    InvocationTargetException.class,
+                    MethodType.methodType(void.class, Throwable.class)
             );
 
             MH_adapter$findConstructor = lookup.findStatic(ReflectionRedirectHook.class, "adapter$findConstructor", MethodType.methodType(MethodHandle.class, SandboxRuntime.class, MethodHandles.Lookup.class, Class.class, MethodType.class));
@@ -238,26 +243,44 @@ public class ReflectionRedirectHook extends FakedInvocationHook {
         ).dynamicInvoker().invoke();
     }
 
+    private static MethodHandle wrapExceptionToInvocationTargetException(MethodHandle mh) {
+        return MethodHandles.catchException(
+                mh,
+                Throwable.class,
+                MethodHandles.filterArguments(
+                        MethodHandles.throwException(mh.type().returnType(), InvocationTargetException.class),
+                        0,
+                        MH_InvocationTargetException$new
+                )
+        );
+    }
+
     private static Object adapter$methodInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Method method, Object thiz, Object[] args) throws Throwable {
         Objects.requireNonNull(method);
 
         var cachePool = MethodUnreflectCachePool.unreflectMethodCache.get(caller.lookupClass());
         var cachedHandle = cachePool.get(method);
-        if (cachedHandle != null) {
+        if (cachedHandle == null) {
+
+            cachedHandle = adapter$unreflect(runtime, caller, method);
+            cachedHandle = wrapExceptionToInvocationTargetException(cachedHandle);
+
+            if (Modifier.isStatic(method.getModifiers())) {
+                cachedHandle = cachedHandle.asSpreader(Object[].class, method.getParameterTypes().length);
+                cachedHandle = MethodHandles.dropArguments(cachedHandle, 0, Object.class);
+            } else {
+                cachedHandle = cachedHandle.asSpreader(1, Object[].class, method.getParameterTypes().length);
+            }
+
+            cachePool.put(method, cachedHandle);
+        }
+        try {
             return cachedHandle.invoke(thiz, args);
+        } catch (InvocationTargetException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new IllegalArgumentException(t);
         }
-
-        cachedHandle = adapter$unreflect(runtime, caller, method);
-        if (Modifier.isStatic(method.getModifiers())) {
-            cachedHandle = cachedHandle.asSpreader(Object[].class, method.getParameterTypes().length);
-            cachedHandle = MethodHandles.dropArguments(cachedHandle, 0, Object.class);
-        } else {
-            cachedHandle = cachedHandle.asSpreader(1, Object[].class, method.getParameterTypes().length);
-        }
-
-        Object result = cachedHandle.invoke(thiz, args);
-        cachePool.put(method, cachedHandle);
-        return result;
     }
 
     private static Object adapter$constructorInvoke(SandboxRuntime runtime, MethodHandles.Lookup caller, Constructor<?> constructor, Object[] args) throws Throwable {
@@ -265,16 +288,20 @@ public class ReflectionRedirectHook extends FakedInvocationHook {
 
         var cachePool = MethodUnreflectCachePool.unreflectMethodCache.get(caller.lookupClass());
         var cachedHandle = cachePool.get(constructor);
-        if (cachedHandle != null) {
-            return cachedHandle.invoke(args);
+        if (cachedHandle == null) {
+            cachedHandle = wrapExceptionToInvocationTargetException(adapter$unreflectConstructor(runtime, caller, constructor))
+                    .asSpreader(Object[].class, constructor.getParameterTypes().length);
+
+            cachePool.put(constructor, cachedHandle);
         }
 
-        cachedHandle = adapter$unreflectConstructor(runtime, caller, constructor)
-                .asSpreader(Object[].class, constructor.getParameterTypes().length);
-
-        cachePool.put(constructor, cachedHandle);
-
-        return cachedHandle.invoke(args);
+        try {
+            return cachedHandle.invoke(args);
+        } catch (InvocationTargetException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new IllegalArgumentException(t);
+        }
     }
 
     private static Object adapter$classNewInstance(SandboxRuntime runtime, MethodHandles.Lookup caller, Class<?> type) throws Throwable {
