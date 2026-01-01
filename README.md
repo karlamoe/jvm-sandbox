@@ -1,5 +1,7 @@
 # JVM Sandbox
 
+WIP
+
 An utility to sandboxing applications/plugins
 
 ---
@@ -9,8 +11,10 @@ An utility to sandboxing applications/plugins
 - Reflection hooking (including `java.lang.reflect` & `java.lang.invoke`)
 - File IO Monitor (WIP)
 - ClassLoader re-hooking (WIP)
-- Shutdown call hook (`System.exit` / `Runtime.getRuntime().exit`) (WIP)
-- Subprocess creation hook (WIP)
+- Shutdown call hook (`System.exit` / `Runtime.getRuntime().exit`)
+- Subprocess creation hook
 
 # Technology & Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md)                                       
 
